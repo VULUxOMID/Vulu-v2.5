@@ -10,6 +10,13 @@ import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import notificationService, { NotificationData } from '../services/notificationService';
 
+const WIDGET_PALETTE = {
+  announcement: { accent: '#F59E0B', tint: 'rgba(245,158,11,0.12)' },   // amber
+  friend_request: { accent: '#8B5CF6', tint: 'rgba(139,92,246,0.14)' },  // purple
+  profile_view: { accent: '#60A5FA', tint: 'rgba(96,165,250,0.14)' },    // blue
+  activity: { accent: '#34D399', tint: 'rgba(52,211,153,0.14)' },        // green
+} as const;
+
 // Enable LayoutAnimation on Android
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -59,6 +66,7 @@ const NotificationWidget: React.FC<NotificationWidgetProps> = ({
   onMarkAllRead,
   onRefresh
 }) => {
+  const palette = WIDGET_PALETTE[type] ?? { accent: iconColor, tint: 'rgba(139,92,246,0.14)' };
   const [isExpanded, setIsExpanded] = useState(false);
   const [visibleCount, setVisibleCount] = useState(3);
 
@@ -113,14 +121,14 @@ const NotificationWidget: React.FC<NotificationWidgetProps> = ({
       <View style={styles.widgetHeader}>
         <View style={styles.widgetTitleContainer}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <MaterialIcons name={icon as any} size={18} color={iconColor} style={{ marginRight: 6 }} />
+            <MaterialIcons name={icon as any} size={18} color={palette.accent} style={{ marginRight: 6 }} />
             <Text style={styles.widgetTitle}>{title}</Text>
             {isMarkingAllRead && (
               <Text style={styles.loadingText}> (marking as read...)</Text>
             )}
           </View>
           {unreadCount > 0 && (
-            <View style={styles.widgetCountBadge}>
+            <View style={[styles.widgetCountBadge, { backgroundColor: palette.accent }]}>
               <Text style={styles.widgetCountText}>{unreadCount}</Text>
             </View>
           )}
@@ -182,7 +190,10 @@ const NotificationWidget: React.FC<NotificationWidgetProps> = ({
                   return (
                     <TouchableOpacity
                       key={notification.id}
-                      style={[styles.notificationItem, !notification.read && styles.unreadNotification]}
+                      style={[
+                        styles.notificationItem,
+                        !notification.read && { backgroundColor: palette.tint }
+                      ]}
                       onPress={() => onNotificationPress(notification)}
                       activeOpacity={0.7}
                     >
@@ -193,7 +204,7 @@ const NotificationWidget: React.FC<NotificationWidgetProps> = ({
                         </Text>
                         <Text style={styles.notificationTime}>{formatTime(notification.timestamp)}</Text>
                       </View>
-                      {!notification.read && <View style={styles.unreadIndicator} />}
+                      {!notification.read && <View style={[styles.unreadIndicator, { backgroundColor: palette.accent }]} />}
                     </TouchableOpacity>
                   );
                 })}
@@ -212,7 +223,7 @@ const NotificationWidget: React.FC<NotificationWidgetProps> = ({
             </>
           ) : (
             <View style={styles.emptyStateContainer}>
-              <MaterialIcons name={icon as any} size={48} color="#8F8F8F" />
+              <MaterialIcons name={icon as any} size={48} color={`${palette.accent}`} />
               <Text style={styles.emptyStateTitle}>No {title.toLowerCase()}</Text>
               <Text style={styles.emptyStateText}>Check back later for updates</Text>
             </View>
@@ -497,10 +508,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   widgetContainer: {
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#16171B',
     borderRadius: 12,
     marginBottom: 16,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
   disabledWidget: {
     opacity: 0.6,
@@ -522,7 +535,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   widgetCountBadge: {
-    backgroundColor: '#FF2D55',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -557,10 +569,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 8,
     marginBottom: 8,
+    backgroundColor: '#1E1F25',
   },
-  unreadNotification: {
-    backgroundColor: 'rgba(58, 123, 253, 0.1)',
-  },
+
   notificationAvatar: {
     width: 40,
     height: 40,
@@ -586,7 +597,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#3A7BFD',
     marginLeft: 8,
   },
   moreButton: {

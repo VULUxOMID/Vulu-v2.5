@@ -180,66 +180,79 @@ export class MessagingService {
       };
     }
 
-    // Create new pooled listener
-    const conversationsRef = collection(db, 'conversations');
-    const q = query(
-      conversationsRef,
-      where('participants', 'array-contains', userId)
-    );
+    // Create new pooled listener with authentication check
+    try {
+      const conversationsRef = collection(db, 'conversations');
+      const q = query(
+        conversationsRef,
+        where('participants', 'array-contains', userId)
+      );
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const allConversations = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Conversation[];
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const allConversations = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Conversation[];
 
-      // Filter and sort conversations
-      const activeConversations = allConversations
-        .filter(conversation =>
-          !conversation.isArchived || !conversation.isArchived[userId]
-        )
-        .sort((a, b) => {
-          let timeA: Date, timeB: Date;
-          try {
-            timeA = a.lastMessageTime?.toDate ? a.lastMessageTime.toDate() :
-                   a.lastMessageTime instanceof Date ? a.lastMessageTime : new Date(0);
-          } catch { timeA = new Date(0); }
-          try {
-            timeB = b.lastMessageTime?.toDate ? b.lastMessageTime.toDate() :
-                   b.lastMessageTime instanceof Date ? b.lastMessageTime : new Date(0);
-          } catch { timeB = new Date(0); }
-          return timeB.getTime() - timeA.getTime();
-        });
+        // Filter and sort conversations
+        const activeConversations = allConversations
+          .filter(conversation =>
+            !conversation.isArchived || !conversation.isArchived[userId]
+          )
+          .sort((a, b) => {
+            let timeA: Date, timeB: Date;
+            try {
+              timeA = a.lastMessageTime?.toDate ? a.lastMessageTime.toDate() :
+                     a.lastMessageTime instanceof Date ? a.lastMessageTime : new Date(0);
+            } catch { timeA = new Date(0); }
+            try {
+              timeB = b.lastMessageTime?.toDate ? b.lastMessageTime.toDate() :
+                     b.lastMessageTime instanceof Date ? b.lastMessageTime : new Date(0);
+            } catch { timeB = new Date(0); }
+            return timeB.getTime() - timeA.getTime();
+          });
 
-      callback(activeConversations);
-    }, (error) => {
-      console.error('Error in pooled conversation listener:', error);
+        callback(activeConversations);
+      }, (error) => {
+        // Handle permission errors gracefully for guest users
+        if (error?.code === 'permission-denied') {
+          console.log('📡 Permission denied for conversation listener - user may be guest or not authenticated');
+          callback([]);
+          return;
+        }
+
+        console.error('Error in pooled conversation listener:', error);
+        callback([]);
+      });
+
+      // Add to pool
+      const pooledListener = {
+        unsubscribe,
+        subscribers: new Set([subscriberId]),
+        lastUsed: Date.now()
+      };
+
+      this.listenerPool.set(poolKey, pooledListener);
+      console.log(`📡 Created new pooled conversation listener for user ${userId}`);
+
+      // Return unsubscribe function for this subscriber
+      return () => {
+        pooledListener.subscribers.delete(subscriberId);
+        if (pooledListener.subscribers.size === 0) {
+          setTimeout(() => {
+            if (pooledListener.subscribers.size === 0) {
+              pooledListener.unsubscribe();
+              this.listenerPool.delete(poolKey);
+              console.log(`📡 Removed unused conversation listener for user ${userId}`);
+            }
+          }, 30000);
+        }
+      };
+    } catch (error) {
+      console.error('Failed to create pooled conversation listener:', error);
       callback([]);
-    });
-
-    // Add to pool
-    const pooledListener = {
-      unsubscribe,
-      subscribers: new Set([subscriberId]),
-      lastUsed: Date.now()
-    };
-
-    this.listenerPool.set(poolKey, pooledListener);
-    console.log(`📡 Created new pooled conversation listener for user ${userId}`);
-
-    // Return unsubscribe function for this subscriber
-    return () => {
-      pooledListener.subscribers.delete(subscriberId);
-      if (pooledListener.subscribers.size === 0) {
-        setTimeout(() => {
-          if (pooledListener.subscribers.size === 0) {
-            pooledListener.unsubscribe();
-            this.listenerPool.delete(poolKey);
-            console.log(`📡 Removed unused conversation listener for user ${userId}`);
-          }
-        }, 30000);
-      }
-    };
+      return () => {}; // Return empty unsubscribe function
+    }
   }
 
   /**
@@ -556,15 +569,28 @@ export class MessagingService {
    * Listen to user's conversations in real-time (optimized with pooling)
    */
   onUserConversations(userId: string, callback: (conversations: Conversation[]) => void): () => void {
-    // Use pooled listener for better performance
-    const unsubscribe = this.getPooledConversationListener(userId, callback);
+    // Check if user ID is valid (not empty or guest)
+    if (!userId || userId === 'guest' || userId.startsWith('guest_')) {
+      console.log('📡 Skipping conversation listener for guest user');
+      callback([]);
+      return () => {}; // Return empty unsubscribe function
+    }
 
-    // Track the listener
-    const listenerKey = `conversations-${userId}`;
-    this.conversationListeners.set(listenerKey, unsubscribe);
-    this.activeListeners.add(listenerKey);
+    try {
+      // Use pooled listener for better performance
+      const unsubscribe = this.getPooledConversationListener(userId, callback);
 
-    return unsubscribe;
+      // Track the listener
+      const listenerKey = `conversations-${userId}`;
+      this.conversationListeners.set(listenerKey, unsubscribe);
+      this.activeListeners.add(listenerKey);
+
+      return unsubscribe;
+    } catch (error) {
+      console.error('Failed to set up conversation listener:', error);
+      callback([]);
+      return () => {}; // Return empty unsubscribe function
+    }
   }
 
   // ==================== MESSAGE MANAGEMENT ====================

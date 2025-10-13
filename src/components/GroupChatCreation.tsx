@@ -19,6 +19,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { messagingService } from '../services/messagingService';
+import { firestoreService } from '../services/firestoreService';
 import { AppUser } from '../services/types';
 
 interface GroupChatCreationProps {
@@ -48,15 +49,26 @@ const GroupChatCreation = ({ visible, onClose, onGroupCreated }: GroupChatCreati
   }, [visible, user]);
 
   const loadFriends = async () => {
-    if (!user) return;
+    if (!user?.uid) return;
 
     try {
       setIsLoading(true);
-      const friendsList = await messagingService.getFriends(user.uid);
-      const selectableFriends = friendsList.map(friend => ({
+      // Use the same friend source the rest of the app uses
+      const raw = await firestoreService.getUserFriends(user.uid);
+
+      // Normalize shape to ensure `uid` exists (some places return `id`)
+      const friendsList = (raw || []).map((f: any) => ({
+        ...f,
+        uid: f.uid ?? f.id, // keyExtractor uses uid
+        displayName: f.displayName || f.name || f.username || f.email || 'Unknown',
+        photoURL: f.photoURL || f.avatar || undefined,
+      }));
+
+      const selectableFriends = friendsList.map((friend: any) => ({
         ...friend,
         selected: false,
       }));
+
       setFriends(selectableFriends);
     } catch (error) {
       console.error('Error loading friends:', error);
@@ -260,10 +272,8 @@ const GroupChatCreation = ({ visible, onClose, onGroupCreated }: GroupChatCreati
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
+  container: { flex: 1, backgroundColor: '#0F1115' },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -271,114 +281,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#0F1115',
   },
   cancelButton: {
     padding: 8,
   },
-  cancelText: {
-    fontSize: 16,
-    color: '#007AFF',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
-  },
+  cancelText: { fontSize: 16, color: '#8B5CF6' },
+  title: { fontSize: 18, fontWeight: '700', color: '#FFFFFF' },
   createButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#8B5CF6',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     minWidth: 60,
     alignItems: 'center',
   },
-  disabledButton: {
-    backgroundColor: '#CCC',
-  },
-  createText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
+  disabledButton: { backgroundColor: 'rgba(139,92,246,0.35)' },
+  createText: { fontSize: 16, fontWeight: '700', color: '#0F1115' },
+  content: { flex: 1, padding: 16 },
   groupInfoSection: {
     marginBottom: 24,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 12,
-  },
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#A7ADBA', marginBottom: 10 },
   input: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
+    backgroundColor: '#181A20',
+    borderWidth: 0,
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     fontSize: 16,
+    color: '#FFFFFF',
     marginBottom: 12,
   },
-  descriptionInput: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
+  descriptionInput: { height: 92, textAlignVertical: 'top' },
   selectedUsersSection: {
     marginBottom: 24,
   },
-  selectedUsersList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
+  selectedUsersList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   selectedUserChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0F0F0',
-    paddingHorizontal: 12,
+    backgroundColor: 'rgba(139,92,246,0.15)',
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 14,
     gap: 6,
   },
-  selectedUserName: {
-    fontSize: 14,
-    color: '#333',
-  },
-  friendsSection: {
-    flex: 1,
-  },
+  selectedUserName: { fontSize: 13, color: '#E5E7EB' },
+  friendsSection: { flex: 1 },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 12,
   },
-  loadingText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#666',
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#999',
-  },
-  friendsList: {
-    flex: 1,
-  },
+  loadingText: { fontSize: 14, color: '#9BA3AF' },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
+  emptyText: { fontSize: 16, fontWeight: '600', color: '#E5E7EB' },
+  emptySubtext: { fontSize: 13, color: '#9BA3AF' },
+  friendsList: { flex: 1 },
   friendItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -386,11 +348,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: 'rgba(255,255,255,0.06)',
   },
-  selectedFriendItem: {
-    backgroundColor: '#F0F8FF',
-  },
+  selectedFriendItem: { backgroundColor: 'rgba(139,92,246,0.10)' },
   friendInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -400,7 +360,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#2A2D3A',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -410,37 +370,22 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
   },
-  avatarText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  avatarText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
   friendDetails: {
     flex: 1,
   },
-  friendName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#000',
-  },
-  friendEmail: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
+  friendName: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
+  friendEmail: { fontSize: 13, color: '#9BA3AF', marginTop: 2 },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
-    borderColor: '#CCC',
+    borderColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  checkedBox: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
+  checkedBox: { backgroundColor: '#8B5CF6', borderColor: '#8B5CF6' },
 });
 
 export default GroupChatCreation;

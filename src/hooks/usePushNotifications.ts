@@ -174,50 +174,10 @@ export const useNotificationBadge = () => {
  * Temporarily disabled due to Metro bundler issues
  */
 export const useNotificationTesting = () => {
-  /**
-   * Send test notification
-   */
-  const sendTestNotification = useCallback(async (title: string, body: string) => {
-    try {
-      // Temporarily disabled - using static import instead
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title,
-          body,
-          data: { test: true },
-        },
-        trigger: null,
-      });
-
-      console.log('✅ Test notification sent');
-    } catch (error) {
-      console.error('Error sending test notification:', error);
-    }
-  }, []);
-
-  /**
-   * Send test message notification
-   */
-  const sendTestMessageNotification = useCallback(async () => {
-    await sendTestNotification(
-      'Test Message',
-      'This is a test message notification'
-    );
-  }, [sendTestNotification]);
-
-  /**
-   * Send test mention notification
-   */
-  const sendTestMentionNotification = useCallback(async () => {
-    await sendTestNotification(
-      'Test Mention',
-      'You were mentioned in a test message'
-    );
-  }, [sendTestNotification]);
-
+  // Temporarily disabled to fix module resolution issue
   return {
-    sendTestNotification,
-    sendTestMessageNotification,
-    sendTestMentionNotification,
+    sendTestNotification: () => console.log('Notifications temporarily disabled'),
+    sendTestMessageNotification: () => console.log('Notifications temporarily disabled'),
+    sendTestMentionNotification: () => console.log('Notifications temporarily disabled'),
   };
 };

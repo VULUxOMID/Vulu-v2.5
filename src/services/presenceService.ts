@@ -67,6 +67,17 @@ export class PresenceService {
   }
 
   /**
+   * Force reset the singleton instance (for guest users)
+   */
+  static resetInstance(): void {
+    if (PresenceService.instance) {
+      PresenceService.instance.forceCleanup();
+      PresenceService.instance = new PresenceService();
+      console.log('🔄 Presence service instance reset');
+    }
+  }
+
+  /**
    * Generate unique device ID for multi-device support
    */
   private generateDeviceId(): string {
@@ -86,6 +97,12 @@ export class PresenceService {
    */
   async initialize(userId: string): Promise<void> {
     try {
+      // Check if user is authenticated (not guest)
+      if (userId === 'guest' || userId.startsWith('guest_')) {
+        console.log('👤 Skipping presence initialization for guest user');
+        return;
+      }
+
       this.currentUserId = userId;
       this.isActive = true;
       this.isOnline = true;
@@ -141,12 +158,32 @@ export class PresenceService {
    * Start enhanced heartbeat system with better reliability
    */
   private startEnhancedHeartbeat(): void {
+    // Don't start heartbeat for guest users
+    if (!this.currentUserId || this.currentUserId === 'guest' || this.currentUserId.startsWith('guest_')) {
+      console.log('💓 Skipping heartbeat initialization for guest user');
+      return;
+    }
+
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
     }
 
     this.heartbeatInterval = setInterval(async () => {
+      // First check: Stop immediately if user is guest or null
+      if (!this.currentUserId || this.currentUserId === 'guest' || this.currentUserId.startsWith('guest_')) {
+        console.log('💓 Stopping heartbeat - user is guest or null');
+        this.stopHeartbeat();
+        return;
+      }
+
       if (this.isActive && this.currentUserId && this.isOnline) {
+        // Double-check user is still authenticated
+        if (this.currentUserId === 'guest' || this.currentUserId.startsWith('guest_')) {
+          console.log('💓 Stopping heartbeat - user is now guest');
+          this.stopHeartbeat();
+          return;
+        }
+
         try {
           await this.sendHeartbeat();
           this.lastHeartbeat = Date.now();
@@ -161,10 +198,54 @@ export class PresenceService {
   }
 
   /**
+   * Stop heartbeat system
+   */
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+      console.log('💓 Heartbeat stopped');
+    }
+  }
+
+  /**
+   * Emergency stop all Firebase operations (for guest users)
+   */
+  emergencyStop(): void {
+    console.log('🚨 Emergency stopping all presence service operations');
+
+    // Force stop heartbeat
+    this.stopHeartbeat();
+
+    // Clear all intervals
+    if (this.connectionCheckInterval) {
+      clearInterval(this.connectionCheckInterval);
+      this.connectionCheckInterval = null;
+    }
+
+    // Reset state to prevent any further Firebase operations
+    this.currentUserId = null;
+    this.isActive = false;
+
+    console.log('🚨 Emergency stop completed');
+  }
+
+  /**
    * Send heartbeat to maintain presence
    */
   private async sendHeartbeat(): Promise<void> {
-    if (!this.currentUserId) return;
+    if (!this.currentUserId) {
+      console.log('💓 No current user ID - stopping heartbeat');
+      this.stopHeartbeat();
+      return;
+    }
+
+    // Check if user is authenticated (not guest)
+    if (this.currentUserId === 'guest' || this.currentUserId.startsWith('guest_')) {
+      console.log('💓 Skipping heartbeat for guest user - stopping heartbeat');
+      this.stopHeartbeat();
+      return;
+    }
 
     try {
       // Update device session
@@ -176,7 +257,13 @@ export class PresenceService {
 
       // Update main presence document
       await this.updateUserPresence(this.isOnline ? 'online' : 'offline');
-    } catch (error) {
+    } catch (error: any) {
+      // Handle permission errors gracefully for guest users
+      if (error?.code === 'permission-denied') {
+        console.log('💓 Permission denied for heartbeat - user may be guest or not authenticated');
+        return;
+      }
+
       console.error('Error sending heartbeat:', error);
       throw error;
     }
@@ -334,6 +421,12 @@ export class PresenceService {
   async updateUserPresence(status: UserStatus): Promise<void> {
     if (!this.currentUserId) return;
 
+    // Check if user is authenticated (not guest)
+    if (this.currentUserId === 'guest' || this.currentUserId.startsWith('guest_')) {
+      console.log('👤 Skipping presence update for guest user');
+      return;
+    }
+
     try {
       // Update device session first
       if (this.currentDeviceId) {
@@ -358,6 +451,12 @@ export class PresenceService {
 
       console.log(`✅ Enhanced user presence updated: ${status} (device: ${this.currentDeviceId})`);
     } catch (error: any) {
+      // Handle permission errors gracefully for guest users
+      if (error?.code === 'permission-denied') {
+        console.log('👤 Permission denied for presence update - user may be guest or not authenticated');
+        return;
+      }
+
       console.error('Error updating user presence:', error);
     }
   }
@@ -567,6 +666,73 @@ export class PresenceService {
     } catch (error: any) {
       console.error('Error cleaning up presence service:', error);
     }
+  }
+
+  /**
+   * Reset presence service for guest users
+   */
+  resetForGuest(): void {
+    console.log('👤 Resetting presence service for guest user');
+
+    // Stop all intervals
+    this.stopHeartbeat();
+
+    if (this.connectionCheckInterval) {
+      clearInterval(this.connectionCheckInterval);
+      this.connectionCheckInterval = null;
+    }
+
+    // Remove app state listener
+    if (this.appStateSubscription) {
+      this.appStateSubscription.remove();
+      this.appStateSubscription = null;
+    }
+
+    // Clear all presence listeners
+    this.presenceListeners.forEach(unsubscribe => unsubscribe());
+    this.presenceListeners.clear();
+
+    // Reset state
+    this.currentUserId = null;
+    this.isActive = false;
+    this.isOnline = true;
+  }
+
+  /**
+   * Force cleanup without Firebase operations (for instance reset)
+   */
+  private forceCleanup(): void {
+    console.log('🔄 Force cleaning up presence service');
+
+    // Stop all intervals immediately
+    this.stopHeartbeat();
+
+    if (this.connectionCheckInterval) {
+      clearInterval(this.connectionCheckInterval);
+      this.connectionCheckInterval = null;
+    }
+
+    // Remove app state listener
+    if (this.appStateSubscription) {
+      this.appStateSubscription.remove();
+      this.appStateSubscription = null;
+    }
+
+    // Clear all presence listeners
+    this.presenceListeners.forEach(unsubscribe => {
+      try {
+        unsubscribe();
+      } catch (error) {
+        console.warn('Error unsubscribing presence listener:', error);
+      }
+    });
+    this.presenceListeners.clear();
+
+    // Reset all state
+    this.currentUserId = null;
+    this.isActive = false;
+    this.isOnline = true;
+    this.lastHeartbeat = 0;
   }
 
   /**

@@ -227,30 +227,38 @@ const DirectMessagesScreen = () => {
         }, 5000); // 5 second timeout
 
         // Set up real-time listener for conversations with error handling
-        unsubscribeRef.current = messagingService.onUserConversations(
-          currentUser.uid,
-          (updatedConversations) => {
-            // Clear the loading timeout since we got data
-            if (loadingTimeoutRef.current) {
-              clearTimeout(loadingTimeoutRef.current);
-              loadingTimeoutRef.current = null;
+        // Only set up listener for authenticated users
+        if (currentUser?.uid && !currentUser.isAnonymous) {
+          unsubscribeRef.current = messagingService.onUserConversations(
+            currentUser.uid,
+            (updatedConversations) => {
+              // Clear the loading timeout since we got data
+              if (loadingTimeoutRef.current) {
+                clearTimeout(loadingTimeoutRef.current);
+                loadingTimeoutRef.current = null;
+              }
+
+              setConversations(updatedConversations);
+
+              // Convert conversations to chat previews
+              const chatPreviews = updatedConversations
+                .map(conversation => conversationToChatPreview(conversation, currentUser.uid))
+                .filter((chat): chat is ChatPreview => chat !== null);
+
+              setChats(chatPreviews);
+
+              // Set initial active friends (will be updated by presence service)
+              setActiveFriends([]);
+
+              setIsLoading(false);
             }
-
-            setConversations(updatedConversations);
-
-            // Convert conversations to chat previews
-            const chatPreviews = updatedConversations
-              .map(conversation => conversationToChatPreview(conversation, currentUser.uid))
-              .filter((chat): chat is ChatPreview => chat !== null);
-
-            setChats(chatPreviews);
-
-            // Set initial active friends (will be updated by presence service)
-            setActiveFriends([]);
-
-            setIsLoading(false);
-          }
-        );
+          );
+        } else {
+          console.log('📡 Skipping conversation listener - user not authenticated');
+          setIsLoading(false);
+          setConversations([]);
+          setChats([]);
+        }
 
         // Load and listen to online friends separately
         try {

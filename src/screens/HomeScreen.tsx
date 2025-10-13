@@ -66,8 +66,8 @@ const fallbackRouter = {
   }
 };
 
-// Tutorial preferences management
-const TUTORIAL_STORAGE_KEY = '@vulu_tutorial_preferences';
+// Tutorial preferences management - now user-specific
+const getTutorialStorageKey = (userId: string) => `@vulu_tutorial_preferences_${userId}`;
 
 interface TutorialPreferences {
   eventExpandTutorialShown: boolean;
@@ -202,9 +202,9 @@ const HomeScreen = () => {
   
   // Add state for the new minimal gems widget
   const [isMinimalGemsExpanded, setIsMinimalGemsExpanded] = useState(false);
-  // Add states to track if the tutorials have been shown for gems widget (start with default values)
-  const [showGemsExpandTutorial, setShowGemsExpandTutorial] = useState(true);
-  const [showGemsMinimizeTutorial, setShowGemsMinimizeTutorial] = useState(true);
+  // Add states to track if the tutorials have been shown for gems widget (start with false, will be set based on user preferences)
+  const [showGemsExpandTutorial, setShowGemsExpandTutorial] = useState(false);
+  const [showGemsMinimizeTutorial, setShowGemsMinimizeTutorial] = useState(false);
   
   // Load saved spotlight time from AsyncStorage on component mount
   useEffect(() => {
@@ -1105,14 +1105,21 @@ const HomeScreen = () => {
   // Tutorial preferences state - loaded from persistent storage
   const [tutorialPreferences, setTutorialPreferences] = useState<TutorialPreferences>(defaultTutorialPreferences);
 
-  // Add states to track if the tutorials have been shown (start with default values)
-  const [showExpandTutorial, setShowExpandTutorial] = useState(true);
-  const [showMinimizeTutorial, setShowMinimizeTutorial] = useState(true);
+  // Add states to track if the tutorials have been shown (start with false, will be set based on user preferences)
+  const [showExpandTutorial, setShowExpandTutorial] = useState(false);
+  const [showMinimizeTutorial, setShowMinimizeTutorial] = useState(false);
 
-  // Tutorial preferences management functions
+  // Tutorial preferences management functions - now user-specific
   const loadTutorialPreferences = async () => {
     try {
-      const stored = await AsyncStorage.getItem(TUTORIAL_STORAGE_KEY);
+      // Only load tutorial preferences if user is authenticated
+      if (!user?.uid) {
+        console.log('No authenticated user, skipping tutorial preferences load');
+        return;
+      }
+
+      const tutorialStorageKey = getTutorialStorageKey(user.uid);
+      const stored = await AsyncStorage.getItem(tutorialStorageKey);
       if (stored) {
         const preferences = JSON.parse(stored);
         setTutorialPreferences(preferences);
@@ -1121,6 +1128,14 @@ const HomeScreen = () => {
         setShowMinimizeTutorial(!preferences.eventMinimizeTutorialShown);
         setShowGemsExpandTutorial(!preferences.gemsExpandTutorialShown);
         setShowGemsMinimizeTutorial(!preferences.gemsMinimizeTutorialShown);
+        console.log('✅ Loaded tutorial preferences for user:', user.uid);
+      } else {
+        console.log('📚 No tutorial preferences found for user, showing tutorials');
+        // Reset to default state for new users
+        setShowExpandTutorial(true);
+        setShowMinimizeTutorial(true);
+        setShowGemsExpandTutorial(true);
+        setShowGemsMinimizeTutorial(true);
       }
     } catch (error) {
       console.warn('Failed to load tutorial preferences:', error);
@@ -1129,9 +1144,17 @@ const HomeScreen = () => {
 
   const saveTutorialPreferences = async (newPreferences: Partial<TutorialPreferences>) => {
     try {
+      // Only save tutorial preferences if user is authenticated
+      if (!user?.uid) {
+        console.log('No authenticated user, skipping tutorial preferences save');
+        return;
+      }
+
+      const tutorialStorageKey = getTutorialStorageKey(user.uid);
       const updatedPreferences = { ...tutorialPreferences, ...newPreferences };
-      await AsyncStorage.setItem(TUTORIAL_STORAGE_KEY, JSON.stringify(updatedPreferences));
+      await AsyncStorage.setItem(tutorialStorageKey, JSON.stringify(updatedPreferences));
       setTutorialPreferences(updatedPreferences);
+      console.log('💾 Saved tutorial preferences for user:', user.uid, newPreferences);
     } catch (error) {
       console.warn('Failed to save tutorial preferences:', error);
     }
@@ -1141,14 +1164,26 @@ const HomeScreen = () => {
     await saveTutorialPreferences({ [tutorialType]: true });
   };
 
-  // Load tutorial preferences on component mount
+  // Load tutorial preferences when user authentication state changes
   useEffect(() => {
-    loadTutorialPreferences();
-  }, []);
+    if (user?.uid) {
+      loadTutorialPreferences();
+    } else {
+      // Reset tutorial states for unauthenticated users
+      setShowExpandTutorial(true);
+      setShowMinimizeTutorial(true);
+      setShowGemsExpandTutorial(true);
+      setShowGemsMinimizeTutorial(true);
+      setTutorialPreferences(defaultTutorialPreferences);
+    }
+  }, [user?.uid]); // Depend on user ID to reload when user changes
 
-  // Add logging to track state changes and mark tutorials as permanently shown
+  // Track tutorial interactions for event widget
   useEffect(() => {
-    // Hide appropriate tutorial after user has interacted with the widget
+    // Only show tutorials for authenticated users
+    if (!user?.uid) return;
+
+    // Show expand tutorial only when user first clicks and hasn't seen it before
     if (isMinimalEventExpanded && showExpandTutorial) {
       setShowExpandTutorial(false);
       markTutorialAsShown('eventExpandTutorialShown');
@@ -1157,7 +1192,7 @@ const HomeScreen = () => {
       setShowMinimizeTutorial(false);
       markTutorialAsShown('eventMinimizeTutorialShown');
     }
-  }, [isMinimalEventExpanded, showExpandTutorial, showMinimizeTutorial]);
+  }, [isMinimalEventExpanded, showExpandTutorial, showMinimizeTutorial, user?.uid]);
 
   // Add animated styles for the minimal event content
   const minimalEventAnimatedStyle = useAnimatedStyle(() => {
@@ -1426,9 +1461,12 @@ const HomeScreen = () => {
     };
   }, [isMinimalGemsExpanded]); // Add dependency array
 
-  // Add logging to track gems state changes and mark tutorials as permanently shown
+  // Track tutorial interactions for gems widget
   useEffect(() => {
-    // Hide appropriate tutorial after user has interacted with the widget
+    // Only show tutorials for authenticated users
+    if (!user?.uid) return;
+
+    // Show expand tutorial only when user first clicks and hasn't seen it before
     if (isMinimalGemsExpanded && showGemsExpandTutorial) {
       setShowGemsExpandTutorial(false);
       markTutorialAsShown('gemsExpandTutorialShown');
@@ -1437,7 +1475,7 @@ const HomeScreen = () => {
       setShowGemsMinimizeTutorial(false);
       markTutorialAsShown('gemsMinimizeTutorialShown');
     }
-  }, [isMinimalGemsExpanded, showGemsExpandTutorial, showGemsMinimizeTutorial]);
+  }, [isMinimalGemsExpanded, showGemsExpandTutorial, showGemsMinimizeTutorial, user?.uid]);
 
   // Add animated styles for the minimal gems content
   const minimalGemsAnimatedStyle = useAnimatedStyle(() => {

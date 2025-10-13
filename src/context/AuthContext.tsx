@@ -16,6 +16,7 @@ import { biometricAuthService } from '../services/biometricAuthService';
 import { securityService } from '../services/securityService';
 import { profileSyncService } from '../services/profileSyncService';
 import { encryptionService } from '../services/encryptionService';
+import { PresenceService } from '../services/presenceService';
 
 interface AuthContextType {
   user: User | GuestUser | null;
@@ -566,7 +567,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       // Clear any existing Firebase session
       await authService.signOut();
-      
+
+      // Reset presence service for guest users
+      PresenceService.resetInstance();
+
+      // Also emergency stop any running operations
+      const presenceService = PresenceService.getInstance();
+      presenceService.emergencyStop();
+
       const guestUser = await authService.signInAsGuest();
       safeSetUser(guestUser);
       safeSetIsGuest(true);
@@ -597,7 +605,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         profileSyncService.stopProfileSync(user.uid);
       }
 
+      // Reset presence service to stop any Firebase operations
+      PresenceService.resetInstance();
 
+      // Also emergency stop any running operations
+      const presenceService = PresenceService.getInstance();
+      presenceService.emergencyStop();
 
       // Clear guest user state immediately using safe setters
       safeSetUser(null);
@@ -644,6 +657,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (user && !isGuest) {
         profileSyncService.stopProfileSync(user.uid);
       }
+
+      // Reset presence service to stop any Firebase operations
+      PresenceService.resetInstance();
+
+      // Also emergency stop any running operations
+      const presenceService = PresenceService.getInstance();
+      presenceService.emergencyStop();
 
       // Clear AsyncStorage with enhanced error handling
       await safeAsyncStorage.multiRemove([
