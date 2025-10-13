@@ -1,0 +1,513 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user owns the resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Debug helper function for activeStream access
+    function debugActiveStreamAccess(userId) {
+      // This will help debug permission issues
+      return isAuthenticated() &&
+             request.auth.uid != null &&
+             request.auth.uid == userId;
+    }
+
+    // USERS COLLECTION - Core user profiles
+    match /users/{userId} {
+      // Allow creation only by the user themselves
+      allow create: if isOwner(userId);
+      // Users can read/update/delete their own profile
+      allow read, update, delete: if isOwner(userId);
+      // Authenticated users can read other users' basic profiles
+      allow read: if isAuthenticated();
+      // Allow public read for username checking during registration
+      allow read: if true;
+
+      // Active stream tracking subcollection - specific document path
+      match /activeStream/current {
+        allow read, write: if debugActiveStreamAccess(userId);
+      }
+
+      // Allow access to any document in activeStream subcollection (for future flexibility)
+      match /activeStream/{documentId} {
+        allow read, write: if debugActiveStreamAccess(userId);
+      }
+    }
+
+    // SHOP & COMMERCE COLLECTIONS
+    match /products/{productId} {
+      allow read: if true; // Public read access for browsing products
+      allow write: if false; // Only admin can modify products (server-side)
+    }
+
+    match /purchases/{purchaseId} {
+      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /userInventory/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // SUBSCRIPTION COLLECTIONS
+    match /userSubscriptions/{userId} {
+      allow read, write: if isOwner(userId);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /subscriptionHistory/{historyId} {
+      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /gemPurchases/{purchaseId} {
+      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // GAMING COLLECTIONS
+    match /miningSessions/{sessionId} {
+      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /slotsSessions/{sessionId} {
+      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /goldMinerSessions/{sessionId} {
+      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // MINING STATS - aggregated mining statistics per user
+    match /miningStats/{userId} {
+      allow read, write: if isOwner(userId);
+      // Allow authenticated users to read public mining stats for leaderboards
+      allow read: if isAuthenticated();
+    }
+
+    // SLOTS STATS - aggregated slots game statistics per user
+    match /slotsStats/{userId} {
+      allow read, write: if isOwner(userId);
+      // Allow authenticated users to read public slots stats for leaderboards
+      allow read: if isAuthenticated();
+    }
+
+    // GOLD MINER STATS - aggregated gold miner game statistics per user
+    match /goldMinerStats/{userId} {
+      allow read, write: if isOwner(userId);
+      // Allow authenticated users to read public gold miner stats for leaderboards
+      allow read: if isAuthenticated();
+    }
+
+    match /gameStats/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // USER GAME PROFILES - for gaming statistics and achievements
+    match /userGameProfiles/{userId} {
+      allow read, write: if isOwner(userId);
+      // Allow authenticated users to read other users' public game stats
+      allow read: if isAuthenticated();
+    }
+
+    // MUSIC COLLECTIONS
+    match /musicActivities/{activityId} {
+      allow read: if isAuthenticated(); // Users can see friends' music activities
+      allow write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /musicPreferences/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // ENCRYPTION KEY MATERIAL
+    // Store each user's public key; user can create/update their own doc, public read allowed for participants
+    match /userPublicKeys/{userId} {
+      allow create, update: if isOwner(userId);
+      // Limit updates to keyId/publicKey fields only
+      allow update: if isOwner(userId) &&
+        request.resource.data.keys().hasOnly(['keyId','publicKey','createdAt','userId']) &&
+        request.resource.data.userId == userId;
+      allow read: if isAuthenticated();
+    }
+
+    // Store per-conversation encrypted symmetric keys
+    match /conversationKeys/{conversationId} {
+      allow create: if isAuthenticated() &&
+        request.resource.data.participants != null &&
+        request.resource.data.participants.hasAny([request.auth.uid]);
+
+      allow read: if isAuthenticated() &&
+        resource.data.participants != null &&
+        resource.data.participants.hasAny([request.auth.uid]);
+
+      // Disallow client updates to prevent tampering; rotation should be create-only or via functions
+      allow update, delete: if false;
+    }
+
+
+    // SOCIAL & ACTIVITY COLLECTIONS
+    match /friendActivities/{activityId} {
+      allow read: if isAuthenticated(); // Users can see friends' activities
+      allow write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // FRIEND REQUESTS COLLECTION - for friend request management
+    match /friendRequests/{requestId} {
+      // Allow creating if the sender is the authenticated user
+      allow create: if isAuthenticated() &&
+        request.auth.uid == request.resource.data.senderId;
+
+      // Allow reading if user is sender or recipient
+      allow read: if isAuthenticated() &&
+        (request.auth.uid == resource.data.senderId ||
+         request.auth.uid == resource.data.recipientId);
+
+      // Allow updating if user is sender or recipient
+      allow update: if isAuthenticated() &&
+        (request.auth.uid == resource.data.senderId ||
+         request.auth.uid == resource.data.recipientId);
+
+      // Allow deleting if user is sender or recipient
+      allow delete: if isAuthenticated() &&
+        (request.auth.uid == resource.data.senderId ||
+         request.auth.uid == resource.data.recipientId);
+    }
+
+    // FRIENDSHIPS COLLECTION - for established friend relationships
+    match /friendships/{friendshipId} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() &&
+        (request.auth.uid == resource.data.userId1 ||
+         request.auth.uid == resource.data.userId2);
+      allow update: if isAuthenticated() &&
+        (request.auth.uid == resource.data.userId1 ||
+         request.auth.uid == resource.data.userId2);
+      allow delete: if isAuthenticated() &&
+        (request.auth.uid == resource.data.userId1 ||
+         request.auth.uid == resource.data.userId2);
+    }
+
+    // FRIENDS COLLECTION - for friend relationships (legacy)
+    match /friends/{friendshipId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.friendId == request.auth.uid
+      );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.friendId == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.friendId == request.auth.uid
+      );
+    }
+
+    // NOTIFICATIONS COLLECTIONS
+    match /notifications/{notificationId} {
+      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /notificationCounts/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // PROFILE ANALYTICS COLLECTIONS
+    match /profileViews/{viewId} {
+      allow read: if isAuthenticated() && (
+        resource.data.profileOwnerId == request.auth.uid ||
+        resource.data.viewerId == request.auth.uid
+      );
+      allow write: if isAuthenticated() && resource.data.viewerId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.viewerId == request.auth.uid;
+    }
+
+    match /profileAnalytics/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // VIRTUAL CURRENCY COLLECTIONS
+    match /currencyTransactions/{transactionId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /currencyBalances/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Helper function to check if user is already in another active stream
+    function userInAnotherStream(userId, currentStreamId) {
+      return exists(/databases/$(database)/documents/users/$(userId)/activeStream/current) &&
+             get(/databases/$(database)/documents/users/$(userId)/activeStream/current).data.streamId != currentStreamId &&
+             get(/databases/$(database)/documents/users/$(userId)/activeStream/current).data.isActive == true;
+    }
+
+    // Helper function to validate stream participant data
+    function isValidParticipant(participant) {
+      return participant.keys().hasAll(['id', 'name', 'avatar', 'isHost', 'isSpeaking', 'isMuted', 'joinedAt']) &&
+             participant.id is string &&
+             participant.name is string &&
+             participant.avatar is string &&
+             participant.isHost is bool &&
+             participant.isSpeaking is bool &&
+             participant.isMuted is bool &&
+             participant.joinedAt is number;
+    }
+
+    // Helper function to check if user is participant in stream
+    function isParticipantInStream(userId, streamData) {
+      return streamData.participants != null &&
+             streamData.participants.size() > 0 &&
+             streamData.participants.hasAny([{'id': userId}]);
+    }
+
+    // STREAMS - Enhanced security rules for single-stream participation
+    match /streams/{streamId} {
+      // Anyone can read streams (both active and inactive)
+      // This allows browsing active streams and cleanup of inactive streams
+      allow read: if true;
+
+      // Simplified stream creation - authenticated users can create streams
+      // Allow creation regardless of initial isActive value; host must match
+      allow create: if isAuthenticated() &&
+                   request.auth.uid == request.resource.data.hostId;
+
+      // Stream updates - host or participant (via participants subcollection) or moderator
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.hostId ||
+        // Treat presence in participants subcollection as membership
+        exists(/databases/$(database)/documents/streams/$(streamId)/participants/$(request.auth.uid)) ||
+        // Moderators can also update
+        (
+          resource.data.moderatorIds != null &&
+          request.auth.uid in resource.data.moderatorIds
+        )
+      ) ||
+
+      // ADMIN/CLEANUP: Allow system cleanup operations for stale/inactive streams
+      // This allows background cleanup service to mark streams as inactive
+      (
+        // Only allow marking streams as inactive (isActive: true -> false)
+        resource.data.isActive == true &&
+        request.resource.data.isActive == false &&
+
+        // Must include cleanup metadata
+        request.resource.data.keys().hasAll(['endedAt', 'endReason']) &&
+        request.resource.data.endReason in ['timeout_cleanup', 'emergency_cleanup', 'system_cleanup'] &&
+
+        // Cannot modify participants during cleanup (safety check)
+        request.resource.data.participants == resource.data.participants &&
+
+        // Cannot change host during cleanup (safety check)
+        request.resource.data.hostId == resource.data.hostId
+      );
+
+      // Only host can delete/end streams
+      allow delete: if isAuthenticated() &&
+                   request.auth.uid == resource.data.hostId;
+    }
+
+    // Stream messages - PUBLIC READ for viewing, authenticated users can write
+    match /streams/{streamId}/messages/{messageId} {
+      allow read: if true; // Public read access for stream messages
+      allow write: if isAuthenticated();
+    }
+
+    // Stream chat subcollection - public read, authenticated create, sender/host/moderator updates
+    match /streams/{streamId}/chat/{messageId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (
+        // Sender can edit/delete
+        request.auth.uid == resource.data.senderId ||
+        // Host or moderator can moderate
+        request.auth.uid == get(/databases/$(database)/documents/streams/$(streamId)).data.hostId ||
+        (
+          get(/databases/$(database)/documents/streams/$(streamId)).data.moderatorIds != null &&
+          request.auth.uid in get(/databases/$(database)/documents/streams/$(streamId)).data.moderatorIds
+        )
+      );
+    }
+
+    // Stream participants subcollection - authenticated read; self/host/moderator can write
+    match /streams/{streamId}/participants/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        request.auth.uid == get(/databases/$(database)/documents/streams/$(streamId)).data.hostId ||
+        (
+          get(/databases/$(database)/documents/streams/$(streamId)).data.moderatorIds != null &&
+          request.auth.uid in get(/databases/$(database)/documents/streams/$(streamId)).data.moderatorIds
+        )
+      );
+    }
+
+    // CONVERSATIONS - users can access conversations they participate in
+    match /conversations/{conversationId} {
+      allow read: if isAuthenticated() &&
+        request.auth.uid in resource.data.participants;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        // Allow participants to update conversations
+        request.auth.uid in resource.data.participants ||
+        // Allow profile sync updates (updating participant profile info)
+        (request.resource.data.keys().hasOnly(['participants']) &&
+         request.auth.uid in request.resource.data.participants)
+      );
+      allow delete: if isAuthenticated() &&
+        request.auth.uid in resource.data.participants;
+    }
+
+    // Allow querying conversations collection for authenticated users
+    match /conversations/{document=**} {
+      allow list: if isAuthenticated();
+      allow read: if isAuthenticated();
+    }
+
+    // Conversation messages - participant-only with strict sender/recipient permissions
+    match /conversations/{conversationId}/messages/{messageId} {
+      // Read: only participants
+      allow read: if isAuthenticated() &&
+        request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+
+      // Create: only participants, and only if the authenticated user is the sender
+      allow create: if isAuthenticated() &&
+        (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants) &&
+        (request.auth.uid == request.resource.data.senderId);
+
+      // Update: participants
+      // - Sender can edit/delete their own message content/flags
+      // - Recipient can append their own receipts (delivered/read metadata) and advance status
+      allow update: if isAuthenticated() &&
+        (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants) && (
+          // Sender-only branch: the original sender can update any fields (content, deletes, etc.)
+          (request.auth.uid == resource.data.senderId) ||
+
+          // Recipient receipts branch: only recipient may update receipt-related fields
+          (
+            resource.data.recipientId == request.auth.uid &&
+            // Only allow changing these specific top-level fields
+            resource.data.diff(request.resource.data).changedKeys().hasOnly([
+              'deliveredTo','deliveredAt','readBy','readAt','status'
+            ])
+          )
+        );
+
+      // Delete: only the sender may delete
+      allow delete: if isAuthenticated() &&
+        (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants) &&
+        (request.auth.uid == resource.data.senderId);
+    }
+
+    // SCHEDULED MESSAGES - users can manage their own scheduled messages
+    match /scheduledMessages/{messageId} {
+      // Users can read their own scheduled messages
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.senderId;
+
+      // Users can create scheduled messages for themselves (schema aligned with app)
+      allow create: if isAuthenticated() &&
+        request.auth.uid == request.resource.data.senderId &&
+        // Required fields
+        request.resource.data.keys().hasAll(['conversationId','senderId','senderName','text','scheduledFor','status']) &&
+        // Only allow whitelisted fields
+        request.resource.data.keys().hasOnly([
+          'conversationId','senderId','senderName','text','scheduledFor','scheduledAt','status',
+          'attachments','replyTo','retryCount','maxRetries','failureReason','cancelledAt','cancelledBy',
+          'sentAt','actualMessageId','lastFailureReason','lastFailedAt','createdAtMeta'
+        ]) &&
+        // Type and value checks
+        request.resource.data.conversationId is string &&
+        request.resource.data.senderName is string &&
+        request.resource.data.text is string && request.resource.data.text.size() > 0 &&
+        request.resource.data.scheduledFor is timestamp && request.resource.data.scheduledFor >= request.time &&
+        request.resource.data.status in ['pending','scheduled'];
+
+      // Users can update their own scheduled messages (status changes, retries)
+      // Also allow system updates for automated processing with admin privileges
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.senderId ||
+        (request.auth.token.admin == true &&
+         request.resource.data.keys().hasOnly(['status','sentAt','actualMessageId','retryCount','lastFailureReason','lastFailedAt','scheduledFor','failureReason','cancelledAt','cancelledBy']))
+      );
+
+      // Users can delete their own scheduled messages
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.senderId;
+    }
+
+
+    // GLOBAL CHAT - PUBLIC READ ACCESS, authenticated users can write
+    match /globalChat/{messageId} {
+      allow read: if true; // Public read access for global chat messages
+      allow create: if isAuthenticated(); // Only authenticated users can send messages
+      allow update, delete: if isAuthenticated() && request.auth.uid == resource.data.senderId;
+    }
+
+    // SHOP STATS & PROMOTIONS
+    match /shopStats/{document=**} {
+      allow read: if true; // Public read for shop statistics
+    }
+
+    match /promotions/{promotionId} {
+      allow read: if true; // Public read for active promotions
+    }
+
+    // SHOP PROMOTIONS - specific collection for shop promotions
+    match /shopPromotions/{promotionId} {
+      allow read: if true; // Public read for shop promotions
+      allow write: if false; // Only admin can modify (server-side)
+    }
+
+    // LEADERBOARDS & ACHIEVEMENTS
+    match /leaderboards/{document=**} {
+      allow read: if true; // Public read for leaderboards
+    }
+
+    match /achievements/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    // PRESENCE COLLECTION - Enhanced presence and device session management
+    match /presence/{userId} {
+      // Users can read their own presence data
+      allow read: if isOwner(userId);
+      // Authenticated users can read other users' presence for friend status
+      allow read: if isAuthenticated();
+      // Users can write their own presence data
+      allow write: if isOwner(userId);
+
+      // Device sessions subcollection
+      match /devices/{deviceId} {
+        // Users can manage their own device sessions
+        allow read, write: if isOwner(userId);
+        // Allow authenticated users to read device sessions for presence status
+        allow read: if isAuthenticated();
+      }
+    }
+
+    // SYSTEM COLLECTIONS (read-only for users)
+    match /systemConfig/{document=**} {
+      allow read: if true; // Public read for system configuration
+    }
+
+    match /appVersion/{document=**} {
+      allow read: if true; // Public read for app version info
+    }
+  }
+}
