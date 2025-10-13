@@ -424,8 +424,8 @@ const DirectMessagesScreen = () => {
     if (!canAddFriends()) {
       return; // Guest restriction will be handled by the hook
     }
-    // Navigate to Add Friends screen
-    router.push('/(main)/add-friends');
+    // Navigate to Add Friends screen with source parameter
+    router.push('/(main)/add-friends?source=directmessages');
   };
 
   const handleCreateGroup = () => {
@@ -573,7 +573,7 @@ const DirectMessagesScreen = () => {
               },
               {
                 name: "person-add",
-                onPress: () => router.push('/friend-requests'),
+                onPress: () => router.push('/friend-requests?source=directmessages'),
                 color: "#FFFFFF"
               },
               {
@@ -750,11 +750,15 @@ const DirectMessagesScreen = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#131318',
+    backgroundColor: '#0F1115',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   container: {
     flex: 1,
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: '#0F1115'
   },
   headerContainer: {
     flexDirection: 'row',
@@ -796,6 +800,32 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  sectionHeaderTitle: {
+    color: '#E5E7EB',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.2
+  },
+  addFriendsChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(139,92,246,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.30)',
   },
   activeUsersScrollContent: {
     paddingRight: 16,
@@ -850,16 +880,53 @@ const styles = StyleSheet.create({
   addFriendsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(110, 105, 244, 0.2)',
+    backgroundColor: 'rgba(139,92,246,0.15)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.30)',
   },
   addFriendsText: {
-    color: '#FFFFFF',
+    color: '#E5E7EB',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     marginLeft: 4,
+  },
+  emptyStateWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24
+  },
+  emptyIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#181A20',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  emptyTitle: {
+    color: '#9BA3AF',
+    fontSize: 14,
+    marginBottom: 12
+  },
+  primaryButton: {
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.35)',
+  },
+  primaryButtonText: {
+    color: '#0F1115',
+    fontSize: 14,
+    fontWeight: '800'
   },
   chatList: {
     flex: 1,
@@ -874,6 +941,31 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  chatItem: {
+    backgroundColor: '#14161B',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginHorizontal: 12,
+    marginVertical: 6,
+  },
+  chatName: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700'
+  },
+  chatLastMsg: {
+    color: '#9BA3AF',
+    fontSize: 13,
+    marginTop: 2
+  },
+  chatTime: {
+    color: '#6B7280',
+    fontSize: 11,
+    marginTop: 4
   },
   chatItemAvatarContainer: {
     position: 'relative',
@@ -970,16 +1062,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   unreadBadge: {
-    backgroundColor: '#6E69F4',
-    borderRadius: 10,
     minWidth: 20,
     height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    backgroundColor: '#8B5CF6',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+  },
+  unreadText: {
+    color: '#0F1115',
+    fontSize: 11,
+    fontWeight: '800'
   },
   unreadBadgeText: {
-    color: '#FFFFFF',
+    color: '#0F1115',
     fontSize: 10,
     fontWeight: 'bold',
   },

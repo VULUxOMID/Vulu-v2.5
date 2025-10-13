@@ -35,6 +35,7 @@ import {
   FriendRequestStatus
 } from './types';
 import { pushNotificationService } from './pushNotificationService';
+import { notificationService } from './notificationService';
 import { encryptionService } from './encryptionService';
 import { messageCacheService } from './messageCacheService';
 import { contentModerationService } from './contentModerationService';
@@ -1246,6 +1247,22 @@ export class MessagingService {
       };
 
       const requestRef = await addDoc(collection(db, 'friendRequests'), requestData);
+
+      // Create notification for the recipient
+      try {
+        await notificationService.createFriendRequestNotification(
+          recipientId,
+          senderId,
+          senderName,
+          senderAvatar || undefined,
+          0 // mutualFriends - could be calculated if needed
+        );
+        console.log(`✅ Friend request notification sent to ${recipientName}`);
+      } catch (notificationError) {
+        console.error('Failed to create friend request notification:', notificationError);
+        // Don't fail the entire request if notification fails
+      }
+
       return requestRef.id;
     } catch (error: any) {
       console.error('Error sending friend request:', error);

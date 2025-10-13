@@ -11,7 +11,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import CommonHeader from '../components/CommonHeader';
@@ -44,6 +44,7 @@ interface FriendRequest {
 
 const AddFriendsScreen = () => {
   const { user: currentUser } = useAuth();
+  const params = useLocalSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
@@ -53,6 +54,27 @@ const AddFriendsScreen = () => {
   const [activeTab, setActiveTab] = useState<'search' | 'requests'>('search');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lastSearchQuery, setLastSearchQuery] = useState('');
+
+  // Smart navigation back function
+  const handleGoBack = useCallback(() => {
+    const source = typeof params.source === 'string' ? params.source : '';
+
+    if (source === 'messages' || source === 'directmessages') {
+      router.push('/(main)/directmessages');
+    } else if (source === 'notifications') {
+      router.push('/(main)/notifications');
+    } else if (source === 'home') {
+      router.push('/(main)');
+    } else {
+      // Default fallback - try router.back() first, then fallback to directmessages
+      try {
+        router.back();
+      } catch (error) {
+        console.log('router.back() failed, falling back to directmessages');
+        router.push('/(main)/directmessages');
+      }
+    }
+  }, [params.source]);
 
   // Load friend requests on component mount
   useEffect(() => {
@@ -332,11 +354,11 @@ const AddFriendsScreen = () => {
         style={styles.gradient}
       >
         {/* Header */}
-        <CommonHeader 
+        <CommonHeader
           title="Add Friends"
           leftIcon={{
             name: "arrow-back",
-            onPress: () => router.back(),
+            onPress: handleGoBack,
             color: "#FFFFFF"
           }}
         />
@@ -426,7 +448,11 @@ const AddFriendsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#131318',
+    backgroundColor: '#0F1115',
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: '#0F1115'
   },
   gradient: {
     flex: 1,
@@ -439,22 +465,48 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 4,
   },
+  tabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
   tab: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
     borderRadius: 6,
   },
+  tabBtn: {
+    flex: 1,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#181A20',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
   activeTab: {
-    backgroundColor: '#6E69F4',
+    backgroundColor: '#8B5CF6',
+  },
+  tabBtnActive: {
+    backgroundColor: 'rgba(139,92,246,0.15)',
+    borderColor: 'rgba(139,92,246,0.35)'
   },
   tabText: {
-    color: '#9BA1A6',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#9BA3AF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   activeTabText: {
-    color: '#FFFFFF',
+    color: '#E5E7EB',
+  },
+  tabTextActive: {
+    color: '#E5E7EB'
   },
   searchContainer: {
     flex: 1,
@@ -467,11 +519,24 @@ const styles = StyleSheet.create({
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#181A20',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  searchBox: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    height: 40,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#181A20',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    color: '#FFFFFF',
   },
   searchInput: {
     flex: 1,
@@ -501,11 +566,41 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
   },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#2A2D3A',
     marginRight: 12,
+  },
+  emptyWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24
+  },
+  emptyIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#181A20',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyCaption: {
+    color: '#9BA3AF',
+    fontSize: 14
   },
   userInfo: {
     flex: 1,
@@ -514,10 +609,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userName: {
-    color: '#6E69F4',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  userSub: {
+    color: '#9BA3AF',
+    fontSize: 12,
+    marginTop: 2
   },
   userDisplayName: {
     color: '#FFFFFF',
@@ -544,22 +643,50 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   actionButton: {
-    backgroundColor: '#6E69F4',
+    backgroundColor: '#8B5CF6',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     marginLeft: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.35)',
   },
   actionButtonDisabled: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   actionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#0F1115',
+    fontSize: 12,
+    fontWeight: '800',
   },
   actionButtonTextDisabled: {
     color: '#9BA1A6',
+  },
+  pillBtn: {
+    paddingHorizontal: 12,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  pillPrimary: {
+    backgroundColor: '#8B5CF6',
+    borderColor: 'rgba(139,92,246,0.35)'
+  },
+  pillPrimaryText: {
+    color: '#0F1115',
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  pillGhost: {
+    backgroundColor: 'transparent',
+    borderColor: 'rgba(255,255,255,0.12)'
+  },
+  pillGhostText: {
+    color: '#E5E7EB',
+    fontSize: 12,
+    fontWeight: '700'
   },
   cancelButton: {
     backgroundColor: 'transparent',

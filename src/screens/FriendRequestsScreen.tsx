@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { PURPLE_COLOR } from '../utils/defaultAvatars';
 import { messagingService } from '../services/messagingService';
@@ -26,6 +26,7 @@ type TabType = 'received' | 'sent';
 const FriendRequestsScreen = () => {
   const { user: currentUser } = useAuth();
   const { canAddFriends } = useGuestRestrictions();
+  const params = useLocalSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('received');
   const [receivedRequests, setReceivedRequests] = useState<FriendRequest[]>([]);
   const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
@@ -33,6 +34,27 @@ const FriendRequestsScreen = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [processingRequests, setProcessingRequests] = useState<Set<string>>(new Set());
+
+  // Smart navigation back function
+  const handleGoBack = useCallback(() => {
+    const source = params.source as string;
+
+    if (source === 'directmessages' || source === 'messages') {
+      // Navigate back to direct messages
+      router.push('/(main)/directmessages');
+    } else if (source === 'notifications') {
+      // Navigate back to notifications
+      router.push('/(main)/notifications');
+    } else {
+      // Default fallback - try router.back() first, then fallback to directmessages
+      try {
+        router.back();
+      } catch (error) {
+        console.log('router.back() failed, falling back to directmessages');
+        router.push('/(main)/directmessages');
+      }
+    }
+  }, [params.source]);
 
   useEffect(() => {
     if (currentUser && canAddFriends) {
@@ -241,7 +263,7 @@ const FriendRequestsScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Friend Requests</Text>
@@ -261,7 +283,7 @@ const FriendRequestsScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Friend Requests</Text>
