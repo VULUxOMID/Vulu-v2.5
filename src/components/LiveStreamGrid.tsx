@@ -6,6 +6,7 @@ import { useLiveStreams, LiveStream } from '../context/LiveStreamContext';
 import { useAuth } from '../context/AuthContext';
 import { streamingService } from '../services/streamingService';
 import { LinearGradient } from 'expo-linear-gradient';
+import { PURPLE } from '../constants/colors';
 import { StreamErrorBoundary } from './StreamErrorBoundary';
 import LiveStreamRefreshButton from './LiveStreamRefreshButton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -444,7 +445,7 @@ const LiveStreamGrid = () => {
       disabled={isOperationInProgress}
     >
       <LinearGradient
-        colors={isOperationInProgress ? ['#666', '#888'] : ['#6E56F7', '#9056F7']}
+        colors={isOperationInProgress ? ['#666', '#888'] : PURPLE.gradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.buttonGradient}
@@ -646,7 +647,7 @@ const styles = StyleSheet.create({
   },
   // Tutorial bubble styles - matching the app's existing tutorial bubbles
   tutorialBubble: {
-    backgroundColor: '#6E69F4',
+    backgroundColor: PURPLE.base,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
@@ -678,7 +679,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: '#6E69F4',
+    borderTopColor: PURPLE.base,
   },
   rankSection: {
     width: '100%',
@@ -858,7 +859,7 @@ const styles = StyleSheet.create({
   },
   pressIndicator: {
     height: '100%',
-    backgroundColor: 'rgb(110, 86, 247)',
+    backgroundColor: PURPLE.base,
   },
 });
 

@@ -8,6 +8,7 @@ import CustomTabBar from '../../src/components/CustomTabBar';
 import SidebarMenu from '../../src/components/SidebarMenu';
 
 import { useUserProfile } from '../../src/context/UserProfileContext';
+import { useAuth } from '../../src/context/AuthContext';
 
 /**
  * Main Layout
@@ -25,12 +26,20 @@ const Layout = () => {
   let profileImage = '';
   let userStatus = 'offline';
   let statusColor = '#8F8F8F';
-  
+  let displayName = 'User';
+
   try {
     const userProfile = useUserProfile();
+    const auth = useAuth();
+
     profileImage = userProfile.profileImage || '';
     userStatus = userProfile.userStatus || 'offline';
     statusColor = userProfile.statusColor || '#8F8F8F';
+
+    // Try to get displayName from auth context first, then fallback to userProfile
+    displayName = auth.userProfile?.displayName || userProfile.displayName || 'User';
+
+
   } catch (error) {
     // AuthProvider not ready yet, use defaults
     console.warn('UserProfile not available yet, using defaults:', error);
@@ -77,11 +86,12 @@ const Layout = () => {
             },
           }}
           tabBar={(props) => (
-            <CustomTabBar 
-              {...props} 
-              profileImage={profileImage} 
-              userStatus={userStatus} 
-              statusColor={statusColor} 
+            <CustomTabBar
+              {...props}
+              profileImage={profileImage}
+              userStatus={userStatus}
+              statusColor={statusColor}
+              displayName={displayName}
             />
           )}
         >

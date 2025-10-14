@@ -15,6 +15,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import CommonHeader from '../components/CommonHeader';
+import PillButton from '../components/PillButton';
+import { PURPLE } from '../constants/colors';
 import { useAuth } from '../context/AuthContext';
 import { firestoreService } from '../services/firestoreService';
 import { notificationService } from '../services/notificationService';
@@ -293,23 +295,29 @@ const AddFriendsScreen = () => {
           <Text style={styles.userDisplayName}>{item.displayName}</Text>
         )}
       </View>
-      <TouchableOpacity
-        style={[
-          styles.actionButton,
-          item.isFriend && styles.actionButtonDisabled,
-          item.requestSent && styles.cancelButton
-        ]}
-        onPress={() => handleFriendRequestToggle(item)}
-        disabled={item.isFriend}
-      >
-        <Text style={[
-          styles.actionButtonText,
-          item.isFriend && styles.actionButtonTextDisabled,
-          item.requestSent && styles.cancelButtonText
-        ]}>
-          {item.isFriend ? 'Friends' : item.requestSent ? 'Cancel' : 'Add Friend'}
-        </Text>
-      </TouchableOpacity>
+      {item.isFriend ? (
+        <PillButton
+          title="Friends"
+          variant="outline"
+          size="sm"
+          onPress={() => {}}
+          disabled={true}
+        />
+      ) : item.requestSent ? (
+        <PillButton
+          title="Cancel"
+          variant="ghost"
+          size="sm"
+          onPress={() => handleFriendRequestToggle(item)}
+        />
+      ) : (
+        <PillButton
+          title="Add"
+          leftIcon="person-add"
+          size="sm"
+          onPress={() => handleFriendRequestToggle(item)}
+        />
+      )}
     </View>
   );
 
@@ -331,18 +339,19 @@ const AddFriendsScreen = () => {
         )}
       </View>
       <View style={styles.requestActions}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.acceptButton]}
+        <PillButton
+          title="Accept"
+          leftIcon="check"
+          size="sm"
           onPress={() => handleFriendRequest(item, 'accept')}
-        >
-          <Text style={styles.actionButtonText}>Accept</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.declineButton]}
+          style={{ marginRight: 8 }}
+        />
+        <PillButton
+          title="Decline"
+          variant="ghost"
+          size="sm"
           onPress={() => handleFriendRequest(item, 'decline')}
-        >
-          <Text style={[styles.actionButtonText, styles.declineButtonText]}>Decline</Text>
-        </TouchableOpacity>
+        />
       </View>
     </View>
   );
@@ -366,18 +375,18 @@ const AddFriendsScreen = () => {
         {/* Tab Selector */}
         <View style={styles.tabContainer}>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'search' && styles.activeTab]}
+            style={[styles.tabBtn, activeTab === 'search' && styles.tabBtnActive]}
             onPress={() => setActiveTab('search')}
           >
-            <Text style={[styles.tabText, activeTab === 'search' && styles.activeTabText]}>
+            <Text style={[styles.tabText, activeTab === 'search' && styles.tabTextActive]}>
               Search Users
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'requests' && styles.activeTab]}
+            style={[styles.tabBtn, activeTab === 'requests' && styles.tabBtnActive]}
             onPress={() => setActiveTab('requests')}
           >
-            <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
+            <Text style={[styles.tabText, activeTab === 'requests' && styles.tabTextActive]}>
               Friend Requests
             </Text>
           </TouchableOpacity>
@@ -400,7 +409,7 @@ const AddFriendsScreen = () => {
                 autoComplete="off"
               />
               {isSearching && searchQuery.trim() && (
-                <ActivityIndicator size="small" color="#6E69F4" style={styles.searchLoader} />
+                <ActivityIndicator size="small" color={PURPLE.base} style={styles.searchLoader} />
               )}
             </View>
 
@@ -474,39 +483,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.06)',
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderRadius: 6,
-  },
   tabBtn: {
     flex: 1,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#181A20',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
   },
-  activeTab: {
-    backgroundColor: '#8B5CF6',
-  },
   tabBtnActive: {
-    backgroundColor: 'rgba(139,92,246,0.15)',
-    borderColor: 'rgba(139,92,246,0.35)'
+    backgroundColor: PURPLE.tintBg,
+    borderColor: PURPLE.tintBorder,
   },
   tabText: {
     color: '#9BA3AF',
     fontSize: 13,
     fontWeight: '700',
   },
-  activeTabText: {
-    color: '#E5E7EB',
-  },
   tabTextActive: {
-    color: '#E5E7EB'
+    color: '#E5E7EB',
   },
   searchContainer: {
     flex: 1,
@@ -639,17 +636,17 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   mutualFriends: {
-    color: '#6E69F4',
+    color: PURPLE.base,
     fontSize: 12,
   },
   actionButton: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: PURPLE.base,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     marginLeft: 8,
     borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.35)',
+    borderColor: PURPLE.tintBorder,
   },
   actionButtonDisabled: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -671,8 +668,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   pillPrimary: {
-    backgroundColor: '#8B5CF6',
-    borderColor: 'rgba(139,92,246,0.35)'
+    backgroundColor: PURPLE.base,
+    borderColor: PURPLE.tintBorder,
   },
   pillPrimaryText: {
     color: '#0F1115',

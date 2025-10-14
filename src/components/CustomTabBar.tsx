@@ -5,21 +5,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HomeIcon, NotificationIcon, PersonIcon } from './icons/AppIcons';
 import { useUserStatus, getStatusColor } from '../context/UserStatusContext';
 import { useNotifications } from '../context/NotificationContext';
-import { getDefaultProfileAvatar } from '../utils/defaultAvatars';
+
 
 interface CustomTabBarProps extends BottomTabBarProps {
   profileImage?: string;
   userStatus?: string;
   statusColor?: string;
+  displayName?: string;
 }
 
-const CustomTabBar: React.FC<CustomTabBarProps> = ({ 
-  state, 
-  descriptors, 
-  navigation, 
+const CustomTabBar: React.FC<CustomTabBarProps> = ({
+  state,
+  descriptors,
+  navigation,
   profileImage,
   userStatus,
-  statusColor = '#7ADA72' // Default to online green color
+  statusColor = '#7ADA72', // Default to online green color
+  displayName
 }) => {
   const insets = useSafeAreaInsets();
   // Use the dynamic notification context instead of a fixed value
@@ -79,17 +81,25 @@ const CustomTabBar: React.FC<CustomTabBarProps> = ({
       case 'profile':
         return (
           <View style={[styles.iconContainer, isFocused && styles.activeIconContainer]}>
-            <View 
+            <View
               style={[
-                styles.profileImageContainer, 
+                styles.profileImageContainer,
                 { borderColor: profileStatusColor }
               ]}
             >
-              <Image 
-                source={{ uri: profileImage || getDefaultProfileAvatar() }} 
-                style={styles.profileImage} 
-                resizeMode="cover"
-              />
+              {profileImage ? (
+                <Image
+                  source={{ uri: profileImage }}
+                  style={styles.profileImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.profileImage, { backgroundColor: '#6E69F4', alignItems: 'center', justifyContent: 'center' }]}>
+                  <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>
+                    {(displayName || 'User').charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
             </View>
             {badgeCount && (
               <View style={styles.notificationsBadge}>
@@ -101,7 +111,7 @@ const CustomTabBar: React.FC<CustomTabBarProps> = ({
       default:
         return null;
     }
-  }, [profileImage, profileStatusColor, counts]);
+  }, [profileImage, profileStatusColor, counts, displayName]);
 
   // If the active route's tabBarStyle is set to display: 'none', hide the tab bar
   if (flattenedTabBarStyle && flattenedTabBarStyle.display === 'none') {

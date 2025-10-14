@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { PURPLE } from '../constants/colors';
 import { useAuth } from '../context/AuthContext';
 import { useLiveStreams } from '../context/LiveStreamContext';
 import { streamingService } from '../services/streamingService';
@@ -525,13 +526,15 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   goLiveButton: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: PURPLE.base,
     paddingVertical: 16,
     borderRadius: 25,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: PURPLE.tintBorder,
   },
   goLiveButtonDisabled: {
-    backgroundColor: '#666666',
+    backgroundColor: 'rgba(110,105,244,0.45)',
   },
   goLiveButtonText: {
     color: '#FFFFFF',

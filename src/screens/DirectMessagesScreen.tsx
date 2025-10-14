@@ -20,6 +20,8 @@ import { router, useRouter } from 'expo-router';
 import { MaterialIcons, AntDesign } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import CommonHeader from '../components/CommonHeader';
+import PillButton from '../components/PillButton';
+import { PURPLE } from '../constants/colors';
 import { firestoreService } from '../services/firestoreService';
 import { messagingService } from '../services/messagingService';
 import { presenceService } from '../services/presenceService';
@@ -188,13 +190,11 @@ const DirectMessagesScreen = () => {
           <MaterialIcons name="chat-bubble-outline" size={24} color="#9BA3AF" />
         </View>
         <Text style={styles.emptyTitle}>You don't have any messages yet</Text>
-        <TouchableOpacity
+        <PillButton
+          title="Start a conversation"
+          leftIcon="chat-bubble-outline"
           onPress={() => router.push('/add-friends?source=messages')}
-          activeOpacity={0.9}
-          style={styles.primaryButton}
-        >
-          <Text style={styles.primaryButtonText}>Start a conversation</Text>
-        </TouchableOpacity>
+        />
       </View>
     );
   };
@@ -665,13 +665,12 @@ const DirectMessagesScreen = () => {
         <View style={styles.messagesHeaderContainer}>
           <Text style={styles.sectionTitle}>Recent Chats</Text>
           {!isGuestUser && (
-            <TouchableOpacity
-              style={styles.addFriendsButton}
+            <PillButton
+              title="Add Friends"
+              leftIcon="group-add"
               onPress={handleAddFriend}
-            >
-              <MaterialIcons name="person-add" size={20} color="#FFFFFF" />
-              <Text style={styles.addFriendsText}>Add Friends</Text>
-            </TouchableOpacity>
+              size="sm"
+            />
           )}
         </View>
 
@@ -737,7 +736,7 @@ const DirectMessagesScreen = () => {
           activeOpacity={0.9}
         >
           <LinearGradient
-            colors={['#6E69F4', '#B768FB']}
+            colors={PURPLE.gradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.groupChatGradient}
@@ -847,9 +846,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: 'rgba(139,92,246,0.15)',
+    backgroundColor: PURPLE.tintBg,
     borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.30)',
+    borderColor: PURPLE.solidBorder,
   },
   activeUsersScrollContent: {
     paddingRight: 16,
@@ -904,12 +903,12 @@ const styles = StyleSheet.create({
   addFriendsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(139,92,246,0.15)',
+    backgroundColor: PURPLE.tintBg,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.30)',
+    borderColor: PURPLE.solidBorder,
   },
   addFriendsText: {
     color: '#E5E7EB',
@@ -940,12 +939,12 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   primaryButton: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: PURPLE.base,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.35)',
+    borderColor: PURPLE.tintBorder,
   },
   primaryButtonText: {
     color: '#0F1115',
@@ -1050,7 +1049,7 @@ const styles = StyleSheet.create({
   },
   typingText: {
     fontSize: 14,
-    color: '#B768FB',
+    color: PURPLE.base,
     marginRight: 4,
   },
   typingDots: {
@@ -1061,7 +1060,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#B768FB',
+    backgroundColor: PURPLE.base,
     marginHorizontal: 1,
   },
   typingDot1: {
@@ -1090,7 +1089,7 @@ const styles = StyleSheet.create({
     height: 20,
     paddingHorizontal: 6,
     borderRadius: 10,
-    backgroundColor: '#8B5CF6',
+    backgroundColor: PURPLE.base,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1118,7 +1117,7 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     elevation: 8, // Increased elevation for better visibility
-    shadowColor: '#6E69F4',
+    shadowColor: PURPLE.base,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4, // Increased shadow opacity
     shadowRadius: 10, // Increased shadow radius

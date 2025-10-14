@@ -85,6 +85,7 @@ export const UserProfileProvider: React.FC<UserProfileProviderProps> = ({ childr
   const currentDisplayName = isGuest ? guestDisplayName : (userProfile?.displayName || 'User');
   const currentUsername = isGuest ? guestUsername : (userProfile?.username || '');
 
+
   // Debug logging for profile changes
   React.useEffect(() => {
     if (!isGuest && userProfile) {

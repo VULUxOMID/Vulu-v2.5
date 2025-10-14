@@ -122,6 +122,9 @@ const ProfileScreen = () => {
   const [photos, setPhotos] = useState<Photo[]>([
     { id: 'profile', uri: profileImage, isProfile: true },
   ]);
+
+  // Only real photos (no empty/placeholder entries)
+  const photosWithUri = photos.filter(p => !!p.uri);
   // Enhanced drag and drop state
   const [draggedPhotoId, setDraggedPhotoId] = useState<string | null>(null);
   const [draggedPhotoPosition, setDraggedPhotoPosition] = useState({ x: 0, y: 0 });
@@ -925,15 +928,23 @@ const ProfileScreen = () => {
               { transform: [{ scale: profileScaleAnim }] }
             ]}
           >
-            <TouchableOpacity 
+            <TouchableOpacity
               activeOpacity={0.9}
               onPress={openPreview}
               style={styles.profileImageTouchable}
             >
-              <Image 
-                source={{ uri: profileImage || getDefaultProfileAvatar(displayName) }} 
-                style={[styles.profileImage, { borderColor: contextStatusData.color }]} 
-              />
+              {profileImage ? (
+                <Image
+                  source={{ uri: profileImage }}
+                  style={[styles.profileImage, { borderColor: contextStatusData.color }]}
+                />
+              ) : (
+                <View style={[styles.profileImage, { backgroundColor: '#6E69F4', borderColor: contextStatusData.color, alignItems: 'center', justifyContent: 'center' }]}>
+                  <Text style={{ color: '#FFF', fontSize: 48, fontWeight: '700' }}>
+                    {(displayName || 'User').charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
               <View style={styles.profileImageOverlay}>
                 <Feather name="eye" size={24} color="#FFFFFF" />
               </View>
@@ -957,7 +968,7 @@ const ProfileScreen = () => {
           {/* Photos Section Header */}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>
-              Your Photos ({photos.length})
+              Your Photos ({photosWithUri.length})
             </Text>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity onPress={openPreview}>
@@ -993,9 +1004,18 @@ const ProfileScreen = () => {
                 </View>
               </LinearGradient>
             </TouchableOpacity>
-            
+
+            {/* Purple placeholder when no photos */}
+            {photosWithUri.length === 0 && (
+              <View style={[styles.photoItemContainer, { backgroundColor: '#6E69F4', alignItems: 'center', justifyContent: 'center' }]}>
+                <Text style={{ color: '#FFF', fontSize: 28, fontWeight: '700' }}>
+                  {(displayName || 'User').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+
                         {/* Photos */}
-            {photos.map((photo, index) => (
+            {photosWithUri.map((photo, index) => (
               <View key={photo.id} style={styles.photoWrapper}>
                 {/* Drop indicator */}
                 {dropTargetIndex === index && draggedPhotoId && draggedPhotoId !== photo.id && (
@@ -1611,11 +1631,19 @@ const ProfileScreen = () => {
                   onPress={() => navigatePreview('next')}
                 />
                 
-                <Image
-                  source={{ uri: profileImage }}
-                  style={styles.previewImage}
-                  resizeMode="cover"
-                />
+                {profileImage ? (
+                  <Image
+                    source={{ uri: profileImage }}
+                    style={styles.previewImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.previewImage, { backgroundColor: '#6E69F4', alignItems: 'center', justifyContent: 'center' }]}>
+                    <Text style={{ color: '#FFF', fontSize: 120, fontWeight: '700' }}>
+                      {(displayName || 'User').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
                 
                 {/* Top info overlay with gradient for header */}
                 <LinearGradient

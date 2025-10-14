@@ -17,6 +17,7 @@ import {
   Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { PURPLE } from '../constants/colors';
 import { useAuth } from '../context/AuthContext';
 import { messagingService } from '../services/messagingService';
 import { firestoreService } from '../services/firestoreService';
@@ -287,17 +288,19 @@ const styles = StyleSheet.create({
   cancelButton: {
     padding: 8,
   },
-  cancelText: { fontSize: 16, color: '#8B5CF6' },
+  cancelText: { fontSize: 16, color: PURPLE.base },
   title: { fontSize: 18, fontWeight: '700', color: '#FFFFFF' },
   createButton: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: PURPLE.base,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     minWidth: 60,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: PURPLE.tintBorder,
   },
-  disabledButton: { backgroundColor: 'rgba(139,92,246,0.35)' },
+  disabledButton: { backgroundColor: 'rgba(110,105,244,0.35)' },
   createText: { fontSize: 16, fontWeight: '700', color: '#0F1115' },
   content: { flex: 1, padding: 16 },
   groupInfoSection: {
@@ -322,7 +325,7 @@ const styles = StyleSheet.create({
   selectedUserChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(139,92,246,0.15)',
+    backgroundColor: PURPLE.tintBg,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 14,
@@ -350,7 +353,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.06)',
   },
-  selectedFriendItem: { backgroundColor: 'rgba(139,92,246,0.10)' },
+  selectedFriendItem: { backgroundColor: 'rgba(110,105,244,0.10)' },
   friendInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -385,7 +388,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  checkedBox: { backgroundColor: '#8B5CF6', borderColor: '#8B5CF6' },
+  checkedBox: { backgroundColor: PURPLE.base, borderColor: PURPLE.base },
 });
 
 export default GroupChatCreation;
