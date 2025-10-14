@@ -16,7 +16,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useRouter } from 'expo-router';
 import { MaterialIcons, AntDesign } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import CommonHeader from '../components/CommonHeader';
@@ -178,6 +178,26 @@ const DirectMessagesScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [isGuestUser, setIsGuestUser] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Empty Messages Component
+  const EmptyMessages = () => {
+    const router = useRouter();
+    return (
+      <View style={styles.emptyStateWrap}>
+        <View style={styles.emptyIconWrap}>
+          <MaterialIcons name="chat-bubble-outline" size={24} color="#9BA3AF" />
+        </View>
+        <Text style={styles.emptyTitle}>You don't have any messages yet</Text>
+        <TouchableOpacity
+          onPress={() => router.push('/add-friends?source=messages')}
+          activeOpacity={0.9}
+          style={styles.primaryButton}
+        >
+          <Text style={styles.primaryButtonText}>Start a conversation</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [showGroupCreation, setShowGroupCreation] = useState(false);
   const searchAnimation = useRef(new Animated.Value(0)).current;
@@ -690,11 +710,15 @@ const DirectMessagesScreen = () => {
             }}
           />
         ) : getFilteredChats().length === 0 ? (
-          <EmptyState
-            message={searchQuery.trim() ? "No messages found matching your search" : "You don't have any messages yet"}
-            actionText={searchQuery.trim() || isGuestUser ? undefined : "Start a conversation"}
-            onAction={searchQuery.trim() || isGuestUser ? undefined : handleAddFriend}
-          />
+          searchQuery.trim() ? (
+            <EmptyState
+              message="No messages found matching your search"
+              actionText={undefined}
+              onAction={undefined}
+            />
+          ) : (
+            <EmptyMessages />
+          )
         ) : (
           <FlatList
             data={getFilteredChats()}
