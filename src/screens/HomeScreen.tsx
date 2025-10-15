@@ -51,6 +51,7 @@ import { getDefaultSpotlightAvatar, getDefaultProfileAvatar } from '../utils/def
 import eventService from '../services/eventService';
 import { Event } from '../types/event';
 import * as Crypto from 'expo-crypto';
+import { db as firestoreDb, functions as cloudFunctions } from '../services/firebase';
 
 // Fallback router for when useRouter() fails
 const fallbackRouter = {
@@ -2042,7 +2043,7 @@ const HomeScreen = () => {
   // Subscribe to current event updates from Firestore
   useEffect(() => {
     console.log('🔍 Setting up event listener...');
-    console.log('🔍 DB initialized?', !!db, 'Functions initialized?', !!functions);
+    console.log('🔍 DB initialized?', !!firestoreDb, 'Functions initialized?', !!cloudFunctions);
 
     const unsubscribe = eventService.onEventSnapshot((event) => {
       if (event) {
