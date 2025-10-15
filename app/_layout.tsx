@@ -96,6 +96,9 @@ import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+// CRITICAL: Initialize Firebase before any providers touch Auth
+import '../src/services/firebase';
+
 // Import all providers
 import { AuthProvider } from '../src/context/AuthContext';
 import { SubscriptionProvider } from '../src/context/SubscriptionContext';

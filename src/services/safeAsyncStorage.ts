@@ -239,6 +239,7 @@ class SafeAsyncStorage {
 
   /**
    * Clear all storage (with memory cache cleanup)
+   * CRITICAL: Preserves Firebase auth keys to maintain user sessions
    */
   async clear(): Promise<void> {
     await this.initialize();
@@ -252,7 +253,14 @@ class SafeAsyncStorage {
     }
 
     try {
-      await AsyncStorage.clear();
+      // CRITICAL FIX: Preserve Firebase auth keys to prevent sign-out on cache clear
+      const keys = await AsyncStorage.getAllKeys();
+      const keysToRemove = keys.filter(key => !key.startsWith('firebase:auth'));
+
+      if (keysToRemove.length > 0) {
+        await AsyncStorage.multiRemove(keysToRemove);
+        console.log(`[SafeStorage] Cleared ${keysToRemove.length} keys (preserved Firebase auth)`);
+      }
     } catch (error: any) {
       console.error('[SafeStorage] clear failed:', error);
       this.handleStorageError(error);
@@ -326,17 +334,29 @@ class SafeAsyncStorage {
 
   /**
    * Check crash history and handle recovery
+   * CRITICAL: Only clears in development, preserves Firebase auth in production
    */
   private async checkCrashHistory(): Promise<void> {
     try {
       const crashCountStr = await AsyncStorage.getItem(this.CRASH_COUNT_KEY);
       const crashCount = crashCountStr ? parseInt(crashCountStr, 10) : 0;
-      
+
       this.status.crashCount = crashCount;
 
       if (crashCount >= this.MAX_CRASHES) {
-        console.warn(`🔄 Detected ${crashCount} previous crashes, clearing AsyncStorage...`);
-        await AsyncStorage.clear();
+        console.warn(`🔄 Detected ${crashCount} previous crashes`);
+
+        // CRITICAL FIX: Only do full clear in development
+        // In production, preserve Firebase auth keys to prevent sign-out
+        if (__DEV__) {
+          console.warn('Development mode: clearing AsyncStorage...');
+          const keys = await AsyncStorage.getAllKeys();
+          const keysToRemove = keys.filter(key => !key.startsWith('firebase:auth'));
+          await AsyncStorage.multiRemove(keysToRemove);
+        } else {
+          console.warn('Production mode: skipping auto-clear to preserve auth');
+        }
+
         await AsyncStorage.setItem(this.CRASH_COUNT_KEY, '0');
         this.status.crashCount = 0;
       }
@@ -397,13 +417,18 @@ class SafeAsyncStorage {
 
   /**
    * Clear cache and restart app
+   * CRITICAL: Preserves Firebase auth keys
    */
   private async clearCacheAndRestart(): Promise<void> {
     try {
-      await AsyncStorage.clear();
+      // CRITICAL FIX: Preserve Firebase auth keys
+      const keys = await AsyncStorage.getAllKeys();
+      const keysToRemove = keys.filter(key => !key.startsWith('firebase:auth'));
+      await AsyncStorage.multiRemove(keysToRemove);
+
       this.memoryCache.clear();
       // Note: In a real app, you might want to restart or reload
-      console.log('Cache cleared, please restart the app');
+      console.log('Cache cleared (preserved auth), please restart the app');
     } catch (error) {
       console.error('Failed to clear cache:', error);
     }

@@ -175,14 +175,21 @@ const safeAsyncStorage = {
 };
 
 // Enhanced storage corruption recovery with multiple fallback strategies
+// CRITICAL: Preserves Firebase auth keys to prevent sign-out
 const handleSimulatorStorageError = async (): Promise<void> => {
   console.log('🔧 Starting enhanced iOS Simulator storage recovery...');
 
-  // Strategy 1: Try gentle AsyncStorage clear
+  // Strategy 1: Try selective clear (preserve Firebase auth)
   try {
-    console.log('📋 Strategy 1: Attempting AsyncStorage.clear()...');
-    await AsyncStorage.clear();
-    console.log('✅ AsyncStorage cleared successfully');
+    console.log('📋 Strategy 1: Attempting selective AsyncStorage clear...');
+    const keys = await AsyncStorage.getAllKeys();
+    const keysToRemove = keys.filter(key => !key.startsWith('firebase:auth'));
+
+    if (keysToRemove.length > 0) {
+      await AsyncStorage.multiRemove(keysToRemove);
+      console.log(`✅ Cleared ${keysToRemove.length} keys (preserved Firebase auth)`);
+    }
+
     await new Promise(resolve => setTimeout(resolve, 500));
 
     // Test if storage is working now
@@ -194,13 +201,15 @@ const handleSimulatorStorageError = async (): Promise<void> => {
     console.warn('❌ Strategy 1 failed:', clearError);
   }
 
-  // Strategy 2: Try individual key removal
+  // Strategy 2: Try individual key removal (preserve Firebase auth)
   try {
     console.log('📋 Strategy 2: Attempting individual key removal...');
     const keys = await AsyncStorage.getAllKeys();
-    if (keys.length > 0) {
-      await AsyncStorage.multiRemove(keys);
-      console.log('✅ Individual keys removed successfully');
+    const keysToRemove = keys.filter(key => !key.startsWith('firebase:auth'));
+
+    if (keysToRemove.length > 0) {
+      await AsyncStorage.multiRemove(keysToRemove);
+      console.log(`✅ Removed ${keysToRemove.length} keys (preserved Firebase auth)`);
       await new Promise(resolve => setTimeout(resolve, 500));
       return;
     }
