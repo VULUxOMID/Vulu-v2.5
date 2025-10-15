@@ -327,6 +327,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Clear timeout since we got a response
       safeTimer.current.clearTimeout(loadingTimeout);
 
+      // Log auth state changes for debugging persistence
+      console.log('🔐 Auth state changed:', firebaseUser ? `signed-in (${firebaseUser.uid})` : 'signed-out');
+
       if (firebaseUser) {
         // Regular Firebase user - use safe setters
         safeSetUser(firebaseUser);

@@ -1,6 +1,21 @@
 # Firebase Auth Persistence Fix for TestFlight
 
-## 🐛 Problem
+## ✅ FIXED: Syntax Error (2025-10-15)
+
+**Issue**: App crashed with `SyntaxError: Unexpected reserved word 'await'` at line 54 in `src/services/firebase.ts`
+
+**Cause**: Used `await` at the top level inside a non-async function (`initializeFirebase`)
+
+**Fix Applied**:
+- Removed all `await` keywords from the initialization function
+- Made AsyncStorage test non-blocking using `.then()` promises
+- Kept `initializeAuth` synchronous as intended
+
+**Status**: ✅ Metro bundler now starts successfully, app should load
+
+---
+
+## 🐛 Original Problem
 
 Users were being **signed out when closing and reopening the app** on TestFlight (production iOS builds), even though Firebase Auth persistence was configured with AsyncStorage.
 

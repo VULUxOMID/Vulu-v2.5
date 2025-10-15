@@ -124,23 +124,37 @@ class EventService {
         (snapshot) => {
           if (snapshot.exists()) {
             const event = snapshot.data() as Event;
+            console.log('📸 Event snapshot received:', {
+              eventId: event.eventId,
+              status: event.status,
+              endTime: event.endTime?.toDate?.()
+            });
             callback(event);
           } else {
+            console.warn('📭 Event snapshot empty - document does not exist');
+            console.warn('💡 Run manageEventCycles Cloud Function to create first event');
             callback(null);
           }
         },
         (error) => {
-          console.error('Event snapshot listener error:', error);
+          console.error('❌ Event snapshot listener error:', error);
+          console.error('❌ Error code:', error.code);
+          console.error('❌ Error message:', error.message);
+
+          if (error.code === 'permission-denied') {
+            console.error('🔒 Firestore security rules may be blocking read access to globalEvents/current');
+          }
+
           FirebaseErrorHandler.logError('onEventSnapshot', error);
-          
+
           // Provide null on error
           callback(null);
         }
       );
     } catch (error: any) {
-      console.error('Failed to set up event listener:', error);
+      console.error('❌ Failed to set up event listener:', error);
       FirebaseErrorHandler.logError('onEventSnapshot', error);
-      
+
       // Return no-op unsubscribe function
       return () => {};
     }

@@ -5,7 +5,6 @@
  */
 
 import {
-  getAuth,
   signInWithPhoneNumber,
   PhoneAuthProvider,
   signInWithCredential,

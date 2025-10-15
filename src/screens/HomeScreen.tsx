@@ -2041,15 +2041,17 @@ const HomeScreen = () => {
 
   // Subscribe to current event updates from Firestore
   useEffect(() => {
-    console.log('Setting up event listener...');
+    console.log('🔍 Setting up event listener...');
+    console.log('🔍 DB initialized?', !!db, 'Functions initialized?', !!functions);
 
     const unsubscribe = eventService.onEventSnapshot((event) => {
       if (event) {
-        console.log('Event update received:', {
+        console.log('✅ Event update received:', {
           eventId: event.eventId,
           cycleNumber: event.cycleNumber,
           totalEntries: event.totalEntries,
-          status: event.status
+          status: event.status,
+          endTime: event.endTime?.toDate?.()
         });
 
         setCurrentEvent(event);
@@ -2059,6 +2061,7 @@ const HomeScreen = () => {
 
         // Calculate time left using server time offset
         const timeLeft = eventService.calculateTimeLeft(event.endTime);
+        console.log('⏱️ Time left calculated:', timeLeft, 'seconds');
         setEventTimeLeft(timeLeft);
 
         // Check if user won this cycle
@@ -2073,26 +2076,34 @@ const HomeScreen = () => {
           previousCycleRef.current = event.cycleNumber;
         }
       } else {
-        console.log('No current event found');
+        console.warn('⚠️ No current event found - manageEventCycles may not have run yet');
       }
     });
 
     return () => {
-      console.log('Cleaning up event listener');
+      console.log('🧹 Cleaning up event listener');
       unsubscribe();
     };
   }, [userProfile?.uid]);
 
   // Update countdown timer every second using server time
   useEffect(() => {
-    if (!currentEvent) return;
+    if (!currentEvent) {
+      console.log('⏸️ Timer paused - no current event');
+      return;
+    }
+
+    console.log('▶️ Timer started for event:', currentEvent.eventId);
 
     const timer = setInterval(() => {
       const timeLeft = eventService.calculateTimeLeft(currentEvent.endTime);
       setEventTimeLeft(timeLeft);
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      console.log('⏹️ Timer stopped');
+      clearInterval(timer);
+    };
   }, [currentEvent]);
 
   // Legacy event timer (kept for backward compatibility, but now disabled)
