@@ -495,6 +495,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Start new session
       await sessionService.startSession();
+
+      // DIAGNOSTIC: Check auth persistence after sign-in
+      try {
+        const { checkAuthPersistence } = await import('../services/firebase');
+        const persistenceStatus = await checkAuthPersistence();
+        console.log('🔍 Auth persistence status after sign-in:', persistenceStatus);
+
+        if (!persistenceStatus.asyncStorageWorks) {
+          console.error('⚠️ WARNING: AsyncStorage not working! User will be signed out on app restart!');
+        }
+
+        if (persistenceStatus.currentUser && !persistenceStatus.currentUser.persistedDataFound) {
+          console.warn('⚠️ WARNING: User signed in but no persisted auth data found in AsyncStorage!');
+        }
+      } catch (diagError) {
+        console.warn('Could not run persistence diagnostic:', diagError);
+      }
     } catch (error: any) {
       // Log failed login attempt
       await securityService.logSecurityEvent({

@@ -251,6 +251,30 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow write: if false; // Only Cloud Functions can create transactions
+    }
+
+    // SYNCHRONIZED EVENT SYSTEM
+    // Global events - read-only for clients, write-only for Cloud Functions
+    match /globalEvents/current {
+      allow read: if isAuthenticated(); // Users can read current event
+      allow write: if false; // Only Cloud Functions can modify events
+
+      // Event entries subcollection
+      match /entries/{userId} {
+        allow read: if isAuthenticated(); // Users can read all entries
+        allow write: if false; // Only Cloud Functions can create entries via enterEvent callable
+      }
+    }
+
+    // Event history - read-only for clients
+    match /globalEvents/history/{document=**} {
+      allow read: if isAuthenticated(); // Users can read event history
+      allow write: if false; // Only Cloud Functions can archive events
+    }
+
     // Helper function to check if user is already in another active stream
     function userInAnotherStream(userId, currentStreamId) {
       return exists(/databases/$(database)/documents/users/$(userId)/activeStream/current) &&

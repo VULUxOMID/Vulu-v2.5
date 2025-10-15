@@ -45,8 +45,22 @@ const initializeFirebase = (): { success: boolean; error?: Error } => {
     app = initializeApp(firebaseConfig);
     console.log('✅ Firebase app initialized');
 
-    // Initialize Auth with AsyncStorage persistence (fallback-safe)
+    // Initialize Auth with AsyncStorage persistence
+    // CRITICAL: Always use persistence - never fall back to session-only auth
     try {
+      // Test AsyncStorage availability first
+      console.log('🔄 Testing AsyncStorage availability...');
+      const testKey = '__firebase_auth_test__';
+      await AsyncStorage.setItem(testKey, 'test');
+      const testValue = await AsyncStorage.getItem(testKey);
+      await AsyncStorage.removeItem(testKey);
+
+      if (testValue !== 'test') {
+        console.error('❌ AsyncStorage test failed - persistence may not work correctly');
+      } else {
+        console.log('✅ AsyncStorage test passed');
+      }
+
       // Use initializeAuth with AsyncStorage persistence for React Native
       auth = initializeAuth(app, {
         persistence: getReactNativePersistence(AsyncStorage)
@@ -66,15 +80,27 @@ const initializeFirebase = (): { success: boolean; error?: Error } => {
       }
     } catch (authError: any) {
       console.error('❌ Firebase Auth initialization failed:', authError);
+      console.error('❌ Error details:', {
+        message: authError.message,
+        code: authError.code,
+        stack: authError.stack
+      });
 
-      // Try fallback initialization without explicit persistence
+      // CRITICAL FIX: Do NOT fall back to getAuth() without persistence
+      // Instead, try to initialize with persistence again but with error tolerance
       try {
-        console.log('🔄 Attempting fallback auth initialization...');
-        auth = getAuth(app);
-        console.log('✅ Firebase Auth initialized with fallback method');
-      } catch (fallbackError) {
-        console.error('❌ Fallback auth initialization also failed:', fallbackError);
-        throw authError; // Throw original error
+        console.log('🔄 Retrying auth initialization with persistence...');
+        auth = initializeAuth(app, {
+          persistence: getReactNativePersistence(AsyncStorage)
+        });
+        console.log('✅ Firebase Auth initialized with AsyncStorage persistence (retry successful)');
+      } catch (retryError: any) {
+        console.error('❌ Retry failed, this will cause sign-out on app restart:', retryError);
+        // Last resort: throw error to prevent app from running without persistence
+        throw new Error(
+          `Firebase Auth persistence initialization failed. This will cause users to be signed out when the app restarts. ` +
+          `Original error: ${authError.message}. Retry error: ${retryError.message}`
+        );
       }
     }
 
@@ -154,6 +180,81 @@ export const getFirebaseStatus = () => {
       functions: !!functions
     }
   };
+};
+
+/**
+ * Diagnostic function to check auth persistence status
+ * Call this after sign-in to verify persistence is working
+ */
+export const checkAuthPersistence = async (): Promise<{
+  isConfigured: boolean;
+  asyncStorageWorks: boolean;
+  currentUser: any;
+  error?: string;
+}> => {
+  try {
+    // Check if auth is initialized
+    if (!auth) {
+      return {
+        isConfigured: false,
+        asyncStorageWorks: false,
+        currentUser: null,
+        error: 'Auth not initialized'
+      };
+    }
+
+    // Test AsyncStorage
+    let asyncStorageWorks = false;
+    try {
+      const testKey = '__persistence_check__';
+      await AsyncStorage.setItem(testKey, 'test');
+      const value = await AsyncStorage.getItem(testKey);
+      await AsyncStorage.removeItem(testKey);
+      asyncStorageWorks = value === 'test';
+    } catch (error: any) {
+      console.error('AsyncStorage test failed:', error);
+    }
+
+    // Check current user
+    const currentUser = auth.currentUser;
+
+    // Try to read Firebase Auth's persistence data
+    let persistedAuthData = null;
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const firebaseKeys = keys.filter(key => key.includes('firebase'));
+      console.log('🔍 Firebase-related AsyncStorage keys:', firebaseKeys);
+
+      // Try to read the auth state key
+      for (const key of firebaseKeys) {
+        const value = await AsyncStorage.getItem(key);
+        if (value && value.includes('uid')) {
+          persistedAuthData = key;
+          console.log('✅ Found persisted auth data in key:', key);
+          break;
+        }
+      }
+    } catch (error) {
+      console.warn('Could not check persisted auth data:', error);
+    }
+
+    return {
+      isConfigured: true,
+      asyncStorageWorks,
+      currentUser: currentUser ? {
+        uid: currentUser.uid,
+        email: currentUser.email,
+        persistedDataFound: !!persistedAuthData
+      } : null,
+    };
+  } catch (error: any) {
+    return {
+      isConfigured: false,
+      asyncStorageWorks: false,
+      currentUser: null,
+      error: error.message
+    };
+  }
 };
 
 // Initialize Firebase immediately

@@ -48,6 +48,9 @@ import { useShop } from '../context/ShopContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { formatCurrencyCompact } from '../utils/currencyUtils';
 import { getDefaultSpotlightAvatar, getDefaultProfileAvatar } from '../utils/defaultAvatars';
+import eventService from '../services/eventService';
+import { Event } from '../types/event';
+import * as Crypto from 'expo-crypto';
 
 // Fallback router for when useRouter() fails
 const fallbackRouter = {
@@ -187,17 +190,23 @@ const HomeScreen = () => {
   const { userProfile } = useAuth();
   // Gold balance now comes from currencyBalances state (loaded from Firebase)
   const goldBalance = currencyBalances.gold;
-  const [eventEntryCost, setEventEntryCost] = useState(100); // Fixed entry cost of 100 gold
-  const [eventEntries, setEventEntries] = useState(0); // Number of entries, starting at 0
-  const [eventTimeLeft, setEventTimeLeft] = useState(180); // 3 minutes for demonstration (would be 3 hours in production)
-  const [eventCycleCount, setEventCycleCount] = useState(0); // Track event cycles for uniqueness
-  const [wonEventCycle, setWonEventCycle] = useState(-1); // Track which event cycle the user won in
-  const [hasEnteredEvent, setHasEnteredEvent] = useState(false); // Track if user has entered the current event
-  const [hasWonEvent, setHasWonEvent] = useState(false); // Track if user has won but not claimed
+
+  // Event state - now synchronized with Firestore
+  const [currentEvent, setCurrentEvent] = useState<Event | null>(null);
+  const [eventEntryCost, setEventEntryCost] = useState(100);
+  const [eventEntries, setEventEntries] = useState(0);
+  const [eventTimeLeft, setEventTimeLeft] = useState(180);
+  const [eventCycleCount, setEventCycleCount] = useState(0);
+  const [hasEnteredEvent, setHasEnteredEvent] = useState(false);
+  const [isEnteringEvent, setIsEnteringEvent] = useState(false);
+  const previousCycleRef = useRef<number>(-1);
+
+  // Legacy event state (kept for backward compatibility)
+  const [wonEventCycle, setWonEventCycle] = useState(-1);
+  const [hasWonEvent, setHasWonEvent] = useState(false);
   const [viewersCount, setViewersCount] = useState<number>(35);
   const [showYourPill, setShowYourPill] = useState<boolean>(true);
   const [showOtherPill, setShowOtherPill] = useState<boolean>(true);
-  // Add record of entries for each event cycle
   const [eventEntriesRecord, setEventEntriesRecord] = useState<{[key: number]: number}>({});
   
   // Add state for the new minimal gems widget
@@ -2015,31 +2024,100 @@ const HomeScreen = () => {
       }, 50);
     }
   }, [showGoldPopup]);
-  
-  // Update the useEffect for the automatic event timer to properly detect winners
+
+  // Calculate server time offset on mount and app resume
   useEffect(() => {
-    // Always run the timer, regardless of user participation
+    const calculateOffset = async () => {
+      try {
+        await eventService.calculateServerTimeOffset();
+        console.log('Server time offset calculated');
+      } catch (error) {
+        console.error('Failed to calculate server time offset:', error);
+      }
+    };
+
+    calculateOffset();
+  }, []);
+
+  // Subscribe to current event updates from Firestore
+  useEffect(() => {
+    console.log('Setting up event listener...');
+
+    const unsubscribe = eventService.onEventSnapshot((event) => {
+      if (event) {
+        console.log('Event update received:', {
+          eventId: event.eventId,
+          cycleNumber: event.cycleNumber,
+          totalEntries: event.totalEntries,
+          status: event.status
+        });
+
+        setCurrentEvent(event);
+        setEventCycleCount(event.cycleNumber);
+        setEventEntries(event.totalEntries);
+        setEventEntryCost(event.entryCost);
+
+        // Calculate time left using server time offset
+        const timeLeft = eventService.calculateTimeLeft(event.endTime);
+        setEventTimeLeft(timeLeft);
+
+        // Check if user won this cycle
+        if (event.winnerId === userProfile?.uid && event.status === 'ended') {
+          setHasWonEvent(true);
+          setWonEventCycle(event.cycleNumber);
+        }
+
+        // Reset entry status on new cycle
+        if (event.cycleNumber !== previousCycleRef.current) {
+          setHasEnteredEvent(false);
+          previousCycleRef.current = event.cycleNumber;
+        }
+      } else {
+        console.log('No current event found');
+      }
+    });
+
+    return () => {
+      console.log('Cleaning up event listener');
+      unsubscribe();
+    };
+  }, [userProfile?.uid]);
+
+  // Update countdown timer every second using server time
+  useEffect(() => {
+    if (!currentEvent) return;
+
+    const timer = setInterval(() => {
+      const timeLeft = eventService.calculateTimeLeft(currentEvent.endTime);
+      setEventTimeLeft(timeLeft);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [currentEvent]);
+
+  // Legacy event timer (kept for backward compatibility, but now disabled)
+  // The new Firestore-based system handles all event logic
+  useEffect(() => {
+    // This timer is now disabled - event cycles are managed by Cloud Functions
+    // Keeping the code structure for reference but not executing
+    return () => {};
+
+    /* OLD LOCAL TIMER CODE - NOW REPLACED BY FIRESTORE
     const timer = setInterval(() => {
       setEventTimeLeft(prev => {
         const newValue = Math.max(prev - 1, 0);
 
-        // When timer reaches zero, determine winners and reset
         if (newValue === 0) {
-          // GUARANTEED WIN: If user has entered this cycle and hasn't won yet, they win
           if (hasEnteredEvent && !hasWonEvent) {
-            // Use immediate state update instead of setTimeout to prevent memory leaks
             setHasWonEvent(true);
-            setWonEventCycle(eventCycleCount); // Track which cycle they won in
-
-            // Add notification
+            setWonEventCycle(eventCycleCount);
             const winAmount = calculateWinAmount();
             addEventWinNotification(winAmount);
           }
 
-          // Reset for new cycle immediately to prevent multiple setTimeout calls
-          setEventTimeLeft(180); // Reset to 3 minutes
-          setEventCycleCount(prev => prev + 1); // Increment cycle count
-          setEventEntries(0); // Reset event entries for the new cycle
+          setEventTimeLeft(180);
+          setEventCycleCount(prev => prev + 1);
+          setEventEntries(0);
 
           return 0;
         }
@@ -2048,11 +2126,11 @@ const HomeScreen = () => {
       });
     }, 1000);
 
-    // Clean up on unmount
     return () => {
       clearInterval(timer);
     };
-  }, [hasEnteredEvent, hasWonEvent, eventCycleCount]); // Remove function dependencies to avoid hoisting issues
+    */
+  }, []);
 
   // Helper function to calculate win amount
   const calculateWinAmount = () => {
@@ -2066,60 +2144,78 @@ const HomeScreen = () => {
     return Math.floor(eventEntries * eventEntryCost * 0.7);
   };
 
-  // Update the handleEventEntry function
+  // New Cloud Function-based event entry handler
   const handleEventEntry = async () => {
+    // Prevent double-tap
+    if (isEnteringEvent) {
+      console.log('Entry already in progress, ignoring tap');
+      return;
+    }
+
     if (hasWonEvent) {
-      // If user has won, handle claiming the prize
+      // If user has won, handle claiming the prize (legacy functionality)
       await claimEventPrize();
-    } else if (!hasEnteredEvent) {
-      // Make sure the event isn't expired (timer at 0)
-      if (eventTimeLeft <= 0) {
-        Alert.alert('Event Expired', 'This event has ended. Please wait for the next one.');
-        return;
-      }
+      return;
+    }
 
-      if (!user || isGuest) {
-        handleGuestRestriction('event entry');
-        return;
-      }
+    if (hasEnteredEvent) {
+      Alert.alert('Already Entered', 'You have already entered this event cycle.');
+      return;
+    }
 
-      // If user hasn't entered current cycle
-      if (goldBalance >= eventEntryCost) {
-        try {
-          // Deduct entry cost using virtual currency service
-          await virtualCurrencyService.spendCurrency(
-            user.uid,
-            'gold',
-            eventEntryCost,
-            `Event entry fee - Cycle ${eventCycleCount}`,
-            {
-              type: 'event_entry',
-              eventCycle: eventCycleCount,
-              entryCost: eventEntryCost,
-              timestamp: new Date().toISOString()
-            }
-          );
+    // Check if event is expired
+    if (eventTimeLeft <= 0) {
+      Alert.alert('Event Expired', 'This event has ended. Please wait for the next one.');
+      return;
+    }
 
-          setHasEnteredEvent(true);
+    // Check authentication
+    if (!user || isGuest) {
+      handleGuestRestriction('event entry');
+      return;
+    }
 
-          // Increment entries
-          const newEntryCount = eventEntries + 1;
-          setEventEntries(newEntryCount);
+    // Check gold balance (client-side check for UX, server will validate too)
+    if (goldBalance < eventEntryCost) {
+      Alert.alert('Insufficient Gold', `You need ${eventEntryCost} gold to enter this event.`);
+      return;
+    }
 
-          // Record the entry count for this event cycle
-          setEventEntriesRecord(prev => ({
-            ...prev,
-            [eventCycleCount]: newEntryCount
-          }));
+    setIsEnteringEvent(true);
 
-          Alert.alert('Entry Successful!', `You've entered the event for ${eventEntryCost} gold!`);
-        } catch (error: any) {
-          console.error('Failed to enter event:', error);
-          Alert.alert('Entry Failed', error.message || 'Failed to enter event. Please try again.');
+    try {
+      // Generate idempotency key to prevent double-charging
+      const idempotencyKey = Crypto.randomUUID();
+
+      console.log('Entering event with idempotency key:', idempotencyKey);
+
+      // Call Cloud Function to enter event
+      const result = await eventService.enterEvent(idempotencyKey);
+
+      if (result.alreadyEntered) {
+        Alert.alert('Already Entered', 'You have already entered this event.');
+        setHasEnteredEvent(true);
+      } else if (result.success) {
+        setHasEnteredEvent(true);
+        Alert.alert(
+          'Entry Successful!',
+          `You're in! Ticket #${result.ticketNumber}\n\nGood luck! 🍀`
+        );
+      } else if (result.error) {
+        // Handle specific errors
+        if (result.error.includes('Insufficient gold')) {
+          Alert.alert('Not Enough Gold', `You need ${eventEntryCost} gold to enter.`);
+        } else if (result.error.includes('expired')) {
+          Alert.alert('Event Expired', 'This event has ended. Wait for the next one!');
+        } else {
+          Alert.alert('Entry Failed', result.error);
         }
-      } else {
-        Alert.alert('Insufficient Gold', `You need ${eventEntryCost} gold to enter this event.`);
       }
+    } catch (error: any) {
+      console.error('Failed to enter event:', error);
+      Alert.alert('Error', 'Failed to enter event. Please try again.');
+    } finally {
+      setIsEnteringEvent(false);
     }
   };
 
