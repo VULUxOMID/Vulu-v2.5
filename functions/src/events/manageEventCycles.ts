@@ -226,14 +226,23 @@ export const manageEventCycles = functions.pubsub
         
         // Archive to history
         const historyRef = db.collection('globalEvents').doc('history').collection('events').doc(event.eventId);
-        const archivedEvent = {
+        const archivedEvent: any = {
           ...event,
           status: 'ended',
-          processedAt: admin.firestore.FieldValue.serverTimestamp(),
-          winnerId,
-          winnerTicket,
-          rngSeed
+          processedAt: admin.firestore.FieldValue.serverTimestamp()
         };
+
+        // Only add winner fields if they exist (avoid undefined values)
+        if (winnerId !== undefined) {
+          archivedEvent.winnerId = winnerId;
+        }
+        if (winnerTicket !== undefined) {
+          archivedEvent.winnerTicket = winnerTicket;
+        }
+        if (rngSeed !== undefined) {
+          archivedEvent.rngSeed = rngSeed;
+        }
+
         transaction.set(historyRef, archivedEvent);
         
         // Create next event
