@@ -306,6 +306,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     mounted.current = true;
 
+    // DIAGNOSTIC: Check auth persistence on app startup
+    safeAsync(async () => {
+      const { checkAuthPersistence } = await import('../services/firebase');
+      const status = await checkAuthPersistence();
+      console.log('🔍 Auth persistence on startup:', status);
+
+      if (!status.asyncStorageWorks) {
+        console.error('⚠️ CRITICAL: AsyncStorage not working on startup! Auth will not persist!');
+      }
+      if (status.currentUser) {
+        console.log('✅ User auth restored from persistence:', status.currentUser.email);
+      } else {
+        console.log('ℹ️ No persisted user found on startup (user not signed in)');
+      }
+    }, undefined, 'checkAuthPersistence.onStartup');
+
     // Initialize session service with safe async wrapper
     const initializeSession = async () => {
       await safeAsync(async () => {
