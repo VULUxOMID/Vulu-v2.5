@@ -26,8 +26,9 @@ export const generateDefaultAvatar = (name: string = 'User', size: number = 150)
 /**
  * Get default avatar for spotlight
  */
-export const getDefaultSpotlightAvatar = (): string => {
-  return generateDefaultAvatar('User', 150);
+export const getDefaultSpotlightAvatar = (name?: string): string => {
+  console.log('🔍 getDefaultSpotlightAvatar called with name:', name);
+  return generateDefaultAvatar(name || 'User', 150);
 };
 
 /**

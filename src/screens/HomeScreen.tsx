@@ -17,14 +17,14 @@ import { useLiveStreams } from '../context/LiveStreamContext';
 import { useUserProfile } from '../context/UserProfileContext';
 import SpotlightProgressBar from '../components/SpotlightProgressBar';
 import LiveStreamGrid from '../components/LiveStreamGrid';
-import { 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withTiming, 
-  withSequence, 
-  withRepeat, 
-  cancelAnimation, 
-  Easing 
+import {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSequence,
+  withRepeat,
+  cancelAnimation,
+  Easing
 } from 'react-native-reanimated';
 import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
@@ -47,7 +47,6 @@ import { useGaming } from '../context/GamingContext';
 import { useShop } from '../context/ShopContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { formatCurrencyCompact } from '../utils/currencyUtils';
-import { getDefaultSpotlightAvatar, getDefaultProfileAvatar } from '../utils/defaultAvatars';
 import eventService from '../services/eventService';
 import { Event } from '../types/event';
 import * as Crypto from 'expo-crypto';
@@ -99,18 +98,21 @@ const HomeScreen = () => {
     console.warn('⚠️ useRouter() failed, using fallback:', error);
     router = fallbackRouter;
   }
-  
+
   const [activeTab, setActiveTab] = useState('Week');
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollXRef = useRef(new Animated.Value(0));
   const scrollX = scrollXRef.current;
   const [contentWidth, setContentWidth] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
-  
+
   // Get live stream data from context
   const { friendStreams } = useLiveStreams();
-  const { profileImage } = useUserProfile();
+  const { profileImage, displayName } = useUserProfile();
   const { counts, updateAllNotificationsCount } = useNotifications();
+
+  // Debug: Log displayName to verify it's being passed correctly
+  console.log('🔍 HomeScreen displayName:', displayName);
 
   // Get music data from context
   const { friendsActivities: friendsMusicActivities, isLoadingActivity: isLoadingMusic } = useMusic();
@@ -147,7 +149,7 @@ const HomeScreen = () => {
     getSubscriptionBadge,
     isSubscriptionActive
   } = useSubscription();
-  
+
   // Activity Modal states
   const [activityModalVisible, setActivityModalVisible] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState({
@@ -162,18 +164,18 @@ const HomeScreen = () => {
     friendAvatar: '',
     streamId: '1', // Default stream ID
   });
-  
+
   // Separate timers for you and the boosted user - start at 0 (no free spotlight time)
-  const [yourSpotlightTimeLeft, setYourSpotlightTimeLeft] = useState<number>(0); 
+  const [yourSpotlightTimeLeft, setYourSpotlightTimeLeft] = useState<number>(0);
   const [otherSpotlightTimeLeft, setOtherSpotlightTimeLeft] = useState<number>(0);
-  
+
   // Remove pulsing animation but keep fade effect for transitions
   const fadeAnimRef = useRef(new Animated.Value(1));
   const fadeAnim = fadeAnimRef.current;
 
   const [spotlightModalVisible, setSpotlightModalVisible] = useState(false);
   const [spotlightQueuePosition, setSpotlightQueuePosition] = useState<number>(0);
-  
+
   // Animation for spotlight modal overlay
   const spotlightOverlayAnim = useRef(new Animated.Value(0)).current;
   // Animation for global chat modal overlay
@@ -192,6 +194,9 @@ const HomeScreen = () => {
   // Gold balance now comes from currencyBalances state (loaded from Firebase)
   const goldBalance = currencyBalances.gold;
 
+  // Choose the most reliable display name, mirroring tab bar logic
+  const effectiveDisplayName = (userProfile?.displayName || displayName || 'User');
+
   // Event state - now synchronized with Firestore
   const [currentEvent, setCurrentEvent] = useState<Event | null>(null);
   const [eventEntryCost, setEventEntryCost] = useState(100);
@@ -209,13 +214,13 @@ const HomeScreen = () => {
   const [showYourPill, setShowYourPill] = useState<boolean>(true);
   const [showOtherPill, setShowOtherPill] = useState<boolean>(true);
   const [eventEntriesRecord, setEventEntriesRecord] = useState<{[key: number]: number}>({});
-  
+
   // Add state for the new minimal gems widget
   const [isMinimalGemsExpanded, setIsMinimalGemsExpanded] = useState(false);
   // Add states to track if the tutorials have been shown for gems widget (start with false, will be set based on user preferences)
   const [showGemsExpandTutorial, setShowGemsExpandTutorial] = useState(false);
   const [showGemsMinimizeTutorial, setShowGemsMinimizeTutorial] = useState(false);
-  
+
   // Load saved spotlight time from AsyncStorage on component mount
   useEffect(() => {
     const loadSpotlightTime = async () => {
@@ -223,7 +228,7 @@ const HomeScreen = () => {
         if (user?.uid) {
           const savedYourTime = await AsyncStorage.getItem(`spotlight_your_${user.uid}`);
           const savedOtherTime = await AsyncStorage.getItem(`spotlight_other_${user.uid}`);
-          
+
           if (savedYourTime) {
             const time = parseInt(savedYourTime, 10);
             // Only restore if time is still valid (not expired)
@@ -232,7 +237,7 @@ const HomeScreen = () => {
               console.log(`✅ Restored your spotlight time: ${time} seconds`);
             }
           }
-          
+
           if (savedOtherTime) {
             const time = parseInt(savedOtherTime, 10);
             // Only restore if time is still valid (not expired)
@@ -246,10 +251,10 @@ const HomeScreen = () => {
         console.warn('Failed to load spotlight time from storage:', error);
       }
     };
-    
+
     loadSpotlightTime();
   }, [user?.uid]);
-  
+
   // Save spotlight time to AsyncStorage whenever it changes
   useEffect(() => {
     const saveSpotlightTime = async () => {
@@ -262,10 +267,10 @@ const HomeScreen = () => {
         console.warn('Failed to save spotlight time to storage:', error);
       }
     };
-    
+
     saveSpotlightTime();
   }, [yourSpotlightTimeLeft, otherSpotlightTimeLeft, user?.uid]);
-  
+
   // --- Animation Setup for Your Spotlight Shadow ---
   const yourShadowOpacity = useSharedValue(0.7); // Initial opacity - safe default
 
@@ -331,10 +336,10 @@ const HomeScreen = () => {
     };
   }, []); // Add empty dependency array to prevent reading during render
   // --- End Other Animation Setup ---
-  
+
   // Random user spotlight candidate - only set when user has spotlight time
   const [otherSpotlightCandidate, setOtherSpotlightCandidate] = useState<{ name: string; avatar: string } | null>(null);
-  
+
   // Pick a random friend from watching streams only when they have spotlight time
   useEffect(() => {
     // Only set a candidate if there's spotlight time and friends available
@@ -351,25 +356,25 @@ const HomeScreen = () => {
       setOtherSpotlightCandidate(null);
     }
   }, [friendStreams, otherSpotlightTimeLeft]);
-  
+
   // Your spotlight timer effect
   useEffect(() => {
     if (yourSpotlightTimeLeft <= 0) return;
-    
+
     const timer = setInterval(() => {
       setYourSpotlightTimeLeft(prev => {
         const newValue = Math.max(prev - 1, 0);
         return newValue;
       });
     }, 1000);
-    
+
     return () => clearInterval(timer);
   }, [yourSpotlightTimeLeft]);
-  
+
   // Boosted user spotlight timer effect
   useEffect(() => {
     if (otherSpotlightTimeLeft <= 0) return;
-    
+
     const timer = setInterval(() => {
       setOtherSpotlightTimeLeft(prev => {
         const newValue = Math.max(prev - 1, 0);
@@ -380,17 +385,17 @@ const HomeScreen = () => {
         return newValue;
       });
     }, 1000);
-    
+
     return () => clearInterval(timer);
   }, [otherSpotlightTimeLeft]);
-  
+
   // Utility to format seconds into MM:SS
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
     const s = (seconds % 60).toString().padStart(2, '0');
     return `${m}:${s}`;
   };
-  
+
   // Function to handle container width measurement
   const handleContainerLayout = useCallback((event: LayoutChangeEvent) => {
     setContainerWidth(event.nativeEvent.layout.width);
@@ -402,7 +407,7 @@ const HomeScreen = () => {
   }, []);
 
   // Placeholder for handleScrollContentSizeChange - will be defined after actualChildrenCount
-  
+
   // Simplified scroll handler without haptics or rubber band effects
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
@@ -437,7 +442,7 @@ const HomeScreen = () => {
       friendAvatar: data.friendAvatar || '',
       streamId: data.streamId, // Using the stream ID from the data
     });
-    
+
     // Show modal
     setActivityModalVisible(true);
   };
@@ -450,21 +455,21 @@ const HomeScreen = () => {
   const renderFriendWatchingLive = () => {
     // Use the first watching stream from the context or fallback to default
     const stream = friendStreams.watching[0];
-    
+
     if (!stream) {
       return null; // No watching activity to display
     }
-    
+
     // Get the host and friend details
     const host = stream.hosts[0];
     const friend = stream.friends?.[0];
-    
+
     if (!friend) {
       return null; // No friend watching this stream
     }
-    
+
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.liveStreamContainer}
         onPress={() => handleActivityPress('watching', {
           streamId: stream.id,
@@ -493,7 +498,7 @@ const HomeScreen = () => {
             </View>
           )}
         </View>
-        
+
         {/* Center section with stream title and viewers */}
         <View style={styles.streamInfoContainer}>
           <Text style={styles.streamTitle} numberOfLines={2}>
@@ -501,12 +506,12 @@ const HomeScreen = () => {
           </Text>
           <Text style={styles.viewersText}>{stream.views} Viewers watching</Text>
         </View>
-        
+
         {/* Right section with broadcaster avatar - friend watching (blue) */}
         <View style={styles.broadcasterContainerWrapper}>
           <View style={styles.broadcasterContainer}>
-            <Image 
-              source={{ uri: friend.avatar }} 
+            <Image
+              source={{ uri: friend.avatar }}
               style={styles.broadcasterAvatar}
             />
             <View style={styles.liveIndicator}></View>
@@ -519,22 +524,22 @@ const HomeScreen = () => {
   const renderFriendHostingLive = () => {
     // Use the first hosting stream from the context or fallback to default
     const stream = friendStreams.hosting[0];
-    
+
     if (!stream) {
       return null; // No hosting activity to display
     }
-    
+
     // Find the friend who is hosting
-    const friendHost = stream.hosts.find(host => 
+    const friendHost = stream.hosts.find(host =>
       host.name === 'Michael' || host.name === 'James'
     );
-    
+
     if (!friendHost) {
       return null; // Friend not hosting this stream
     }
-    
+
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.liveStreamContainer}
         onPress={() => handleActivityPress('hosting', {
           streamId: stream.id,
@@ -563,7 +568,7 @@ const HomeScreen = () => {
             </View>
           )}
         </View>
-        
+
         {/* Center section with stream title and viewers */}
         <View style={styles.streamInfoContainer}>
           <Text style={styles.streamTitle} numberOfLines={2}>
@@ -571,12 +576,12 @@ const HomeScreen = () => {
           </Text>
           <Text style={styles.viewersText}>{stream.views} Viewers watching</Text>
         </View>
-        
+
         {/* Right section with broadcaster avatar */}
         <View style={styles.broadcasterContainerWrapper}>
           <View style={styles.broadcasterAvatarContainer}>
-            <Image 
-              source={{ uri: friendHost.avatar }} 
+            <Image
+              source={{ uri: friendHost.avatar }}
               style={styles.broadcasterAvatar}
             />
             <View style={styles.liveIndicatorRed}></View>
@@ -1054,7 +1059,7 @@ const HomeScreen = () => {
       useNativeDriver: true,
     }).start();
   };
-  
+
   const closeSpotlightModal = () => {
     Animated.timing(spotlightOverlayAnim, {
       toValue: 0,
@@ -1109,7 +1114,7 @@ const HomeScreen = () => {
 
   // Add a isActive state/prop check for determining widget display mode
   const [isActive, setIsActive] = useState<boolean>(false); // For demo purposes, can hook to real activity later
-  
+
   // Add a state for the new minimal event widget
   const [isMinimalEventExpanded, setIsMinimalEventExpanded] = useState(false);
   // Tutorial preferences state - loaded from persistent storage
@@ -1233,7 +1238,7 @@ const HomeScreen = () => {
       }]
     };
   }, [isMinimalEventExpanded]); // Add dependency array
-  
+
   // Render a simple minimal event widget with just a title and progress bar
   const renderMinimalEventWidget = () => {
     // Progress percent (0-100) representing time elapsed
@@ -1241,16 +1246,16 @@ const HomeScreen = () => {
     const progressPercent = eventTimeLeft > 0
       ? 100 - (eventTimeLeft / 180 * 100) // Based on 180 seconds (3 min) cycle
       : 100;
-    
+
     const toggleExpanded = () => {
       setIsMinimalEventExpanded(!isMinimalEventExpanded);
     };
-    
+
     // Calculate prize pool based on number of entries
-    const prizePool = eventEntries === 0 ? 0 : eventEntries === 1 ? 
+    const prizePool = eventEntries === 0 ? 0 : eventEntries === 1 ?
       eventEntryCost : // Show full refund amount for 1 entry
       Math.floor(eventEntries * eventEntryCost * 0.7); // 70% of all entries for 2+ entries
-    
+
     return (
       <View style={{position: 'relative', marginBottom: 16}}>
         {/* Expand tutorial bubble for new users (when collapsed) */}
@@ -1262,7 +1267,7 @@ const HomeScreen = () => {
             <View style={styles.tutorialArrow} />
           </View>
         )}
-        
+
         {/* Minimize tutorial bubble (when expanded) */}
         {showMinimizeTutorial && isMinimalEventExpanded && (
           <View style={[styles.tutorialBubble, styles.minimizeBubble]}>
@@ -1272,8 +1277,8 @@ const HomeScreen = () => {
             <View style={styles.tutorialArrow} />
           </View>
         )}
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           onPress={toggleExpanded}
           activeOpacity={0.7}
           style={[
@@ -1286,31 +1291,31 @@ const HomeScreen = () => {
             <View style={styles.minimalEventHeader}>
               <Text style={styles.eventTitle}>Event</Text>
             </View>
-            
+
             <View style={styles.minimalProgressContainer}>
               <View style={styles.minimalProgressTrack}>
-                <View 
+                <View
                   style={[
-                    styles.minimalProgressFill, 
+                    styles.minimalProgressFill,
                     { width: `${progressPercent}%` }
-                  ]} 
+                  ]}
                 />
               </View>
             </View>
-            
+
             {/* Content that shows/hides based on expanded state */}
             {isMinimalEventExpanded && (
               <View style={styles.minimalEventContent}>
                 <View style={styles.eventInfoGrid}>
                   <View style={styles.eventInfoBox}>
                     <Text style={styles.eventInfoValue}>
-                      {eventTimeLeft > 0 
-                        ? `${Math.floor(eventTimeLeft / 60)}:${(eventTimeLeft % 60).toString().padStart(2, '0')}` 
+                      {eventTimeLeft > 0
+                        ? `${Math.floor(eventTimeLeft / 60)}:${(eventTimeLeft % 60).toString().padStart(2, '0')}`
                         : "Time's up!"}
                     </Text>
                     <Text style={styles.eventInfoLabel}>Time Left</Text>
                   </View>
-                  
+
                   <View style={styles.eventInfoBox}>
                     <View style={styles.prizeContainer}>
                       <View style={styles.eventCoinIcon} />
@@ -1318,22 +1323,22 @@ const HomeScreen = () => {
                     </View>
                     <Text style={styles.eventInfoLabel}>Prize Pool</Text>
                   </View>
-                  
+
                   <View style={styles.eventInfoBox}>
                     <Text style={styles.eventInfoValue}>{eventEntries}</Text>
                     <Text style={styles.eventInfoLabel}>Entries</Text>
                   </View>
                 </View>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={[
-                    styles.enterButton, 
+                    styles.enterButton,
                     // Change button color based on state
                     hasWonEvent ? styles.claimButton : styles.enterButton,
                     // Disable button styling if needed
                     (!hasWonEvent && hasEnteredEvent) && styles.enteredButton,
                     (!hasWonEvent && !hasEnteredEvent && goldBalance < eventEntryCost) && styles.disabledButton
-                  ]} 
+                  ]}
                   onPress={(e) => {
                     e.stopPropagation();
                     handleEventEntry();
@@ -1342,7 +1347,7 @@ const HomeScreen = () => {
                   // 1. User has entered but not won yet
                   // 2. User doesn't have enough gold to enter
                   disabled={
-                    (!hasWonEvent && hasEnteredEvent) || 
+                    (!hasWonEvent && hasEnteredEvent) ||
                     (!hasWonEvent && !hasEnteredEvent && goldBalance < eventEntryCost)
                   }
                 >
@@ -1355,10 +1360,10 @@ const HomeScreen = () => {
                       </View>
                     )}
                     <Text style={styles.enterButtonText}>
-                      {hasWonEvent 
-                        ? 'Claim Reward' 
-                        : hasEnteredEvent 
-                          ? 'Entered' 
+                      {hasWonEvent
+                        ? 'Claim Reward'
+                        : hasEnteredEvent
+                          ? 'Entered'
                           : 'Enter'}
                     </Text>
                   </View>
@@ -1374,18 +1379,18 @@ const HomeScreen = () => {
   // Render dynamic Spotlight widget
   const renderSpotlightWidget = () => {
     if (yourSpotlightTimeLeft <= 0) return null;
-    
+
     // Calculate progress for animation (1 to 0)
     const initialYourSpotlightDuration = 300; // 5 minutes in seconds (you can adjust this or make it a state variable)
     const yourProgressAnim = Math.min(1, yourSpotlightTimeLeft / initialYourSpotlightDuration);
-    
+
     return (
       // New wrapper view
       <View style={styles.spotlightWrapper}>
         {/* Loading bar animation - now outside the content container */}
-        <SpotlightProgressBar 
-          width={320} 
-          height={110} 
+        <SpotlightProgressBar
+          width={320}
+          height={110}
           borderRadius={16}
           progress={yourProgressAnim}
           color="#34C759" // NEO_GREEN
@@ -1400,7 +1405,15 @@ const HomeScreen = () => {
         >
           {/* Content is now directly inside TouchableOpacity */}
         <View style={styles.spotlightAvatarWrapper}>
-          <Image source={{ uri: profileImage || getDefaultSpotlightAvatar() }} style={styles.spotlightAvatar} />
+          {profileImage ? (
+            <Image source={{ uri: profileImage }} style={styles.spotlightAvatar} />
+          ) : (
+            <View style={[styles.spotlightAvatar, { backgroundColor: '#6E69F4', alignItems: 'center', justifyContent: 'center' }]}>
+              <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>
+                {(effectiveDisplayName).charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
           <View style={styles.spotlightIndicator} />
         </View>
         <View style={styles.spotlightInfo}>
@@ -1416,18 +1429,18 @@ const HomeScreen = () => {
   // Render random user Spotlight widget
   const renderOtherSpotlightWidget = () => {
     if (!otherSpotlightCandidate || otherSpotlightTimeLeft <= 0) return null;
-    
+
     // Calculate progress for animation (1 to 0)
     const initialOtherSpotlightDuration = 300; // 5 minutes in seconds (you can adjust this or make it a state variable)
     const otherProgressAnim = Math.min(1, otherSpotlightTimeLeft / initialOtherSpotlightDuration);
-    
+
     return (
       // New wrapper view
-      <View style={[styles.spotlightWrapper, { marginRight: 12 }]}> 
+      <View style={[styles.spotlightWrapper, { marginRight: 12 }]}>
         {/* Loading bar animation - outside the content container */}
-        <SpotlightProgressBar 
-          width={320} 
-          height={110} 
+        <SpotlightProgressBar
+          width={320}
+          height={110}
           borderRadius={16}
           progress={otherProgressAnim}
           color="#FFC107" // Match border color
@@ -1441,7 +1454,7 @@ const HomeScreen = () => {
           activeOpacity={0.9} // Maintain high opacity
         >
            {/* Content is now directly inside TouchableOpacity */}
-        <View style={[styles.spotlightAvatarWrapper, { borderColor: '#FFC107', borderWidth: 2 }]}>  
+        <View style={[styles.spotlightAvatarWrapper, { borderColor: '#FFC107', borderWidth: 2 }]}>
           <Image source={{ uri: otherSpotlightCandidate.avatar }} style={styles.spotlightAvatar} />
           <View style={[styles.spotlightIndicator, { backgroundColor: '#FFC107' }]} />
         </View>
@@ -1504,11 +1517,11 @@ const HomeScreen = () => {
   // Render a minimal Gems+ widget with expand/minimize functionality
   const renderMinimalGemsWidget = () => {
     // Use real subscription data instead of hardcoded values
-    
+
     const toggleExpanded = () => {
       setIsMinimalGemsExpanded(!isMinimalGemsExpanded);
     };
-    
+
     return (
       <View style={{position: 'relative', marginBottom: 16}}>
         {/* Expand tutorial bubble for new users (when collapsed) */}
@@ -1520,7 +1533,7 @@ const HomeScreen = () => {
             <View style={styles.tutorialArrow} />
           </View>
         )}
-        
+
         {/* Minimize tutorial bubble (when expanded) */}
         {showGemsMinimizeTutorial && isMinimalGemsExpanded && (
           <View style={[styles.tutorialBubble, styles.minimizeBubble]}>
@@ -1530,8 +1543,8 @@ const HomeScreen = () => {
             <View style={styles.tutorialArrow} />
           </View>
         )}
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           onPress={toggleExpanded}
           activeOpacity={0.7}
           style={[styles.minimalEventContainer, {
@@ -1543,17 +1556,17 @@ const HomeScreen = () => {
           {/* Collapsed state */}
           {!isMinimalGemsExpanded && (
             <View style={{
-              flexDirection: 'row', 
+              flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'space-between',
               width: '100%'
             }}>
               {/* Left side - Title and badge */}
               <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                <MaterialCommunityIcons 
-                  name="diamond-stone" 
-                  size={20} 
-                  color="#B768FB" 
+                <MaterialCommunityIcons
+                  name="diamond-stone"
+                  size={20}
+                  color="#B768FB"
                   style={{marginRight: 8}}
                 />
                 <Text style={{
@@ -1577,20 +1590,20 @@ const HomeScreen = () => {
                   </View>
                 )}
               </View>
-              
+
               {/* Right side - Balance info */}
               <View style={{flexDirection: 'row', alignItems: 'center'}}>
                 <View style={{alignItems: 'flex-end', marginRight: 10}}>
                   <View style={{flexDirection: 'row', alignItems: 'center'}}>
                     <Text style={{
-                      color: '#FFFFFF', 
-                      fontWeight: 'bold', 
+                      color: '#FFFFFF',
+                      fontWeight: 'bold',
                       fontSize: 18
                     }}>{gemBalance}</Text>
-                    <MaterialCommunityIcons 
-                      name="diamond-stone" 
-                      size={14} 
-                      color="rgba(183, 104, 251, 0.7)" 
+                    <MaterialCommunityIcons
+                      name="diamond-stone"
+                      size={14}
+                      color="rgba(183, 104, 251, 0.7)"
                       style={{marginLeft: 4}}
                     />
                   </View>
@@ -1618,7 +1631,7 @@ const HomeScreen = () => {
               </View>
             </View>
           )}
-            
+
           {/* Expanded state */}
           {isMinimalGemsExpanded && (
             <View>
@@ -1628,10 +1641,10 @@ const HomeScreen = () => {
                 alignItems: 'center',
                 marginBottom: 16
               }}>
-                <MaterialCommunityIcons 
-                  name="diamond-stone" 
-                  size={20} 
-                  color="#B768FB" 
+                <MaterialCommunityIcons
+                  name="diamond-stone"
+                  size={20}
+                  color="#B768FB"
                   style={{marginRight: 8}}
                 />
                 <Text style={{
@@ -1655,7 +1668,7 @@ const HomeScreen = () => {
                   </View>
                 )}
               </View>
-              
+
               {/* Daily gems section */}
               <View style={{
                 paddingVertical: 12,
@@ -1664,14 +1677,14 @@ const HomeScreen = () => {
                 marginBottom: 16
               }}>
                 <View style={{
-                  flexDirection: 'row', 
-                  justifyContent: 'space-between', 
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
                   marginBottom: 8
                 }}>
                   <View>
                     <Text style={{
-                      color: 'rgba(255, 255, 255, 0.6)', 
+                      color: 'rgba(255, 255, 255, 0.6)',
                       fontSize: 12,
                       marginBottom: 4
                     }}>Daily Gems</Text>
@@ -1700,7 +1713,7 @@ const HomeScreen = () => {
                     </View>
                   </View>
                 </View>
-                
+
                 <View style={{
                   backgroundColor: 'rgba(183, 104, 251, 0.15)',
                   paddingHorizontal: 12,
@@ -1719,7 +1732,7 @@ const HomeScreen = () => {
                   </Text>
                 </View>
               </View>
-              
+
               {/* Available balance section */}
               <LinearGradient
                 colors={['rgba(183, 104, 251, 0.1)', 'rgba(110, 105, 244, 0.1)']}
@@ -1732,23 +1745,23 @@ const HomeScreen = () => {
                 }}
               >
                 <Text style={{
-                  color: '#B768FB', 
-                  fontSize: 12, 
-                  fontWeight: '600', 
+                  color: '#B768FB',
+                  fontSize: 12,
+                  fontWeight: '600',
                   marginBottom: 8,
                   textAlign: 'center'
                 }}>
                   YOUR AVAILABLE BALANCE
                 </Text>
                 <View style={{
-                  flexDirection: 'row', 
+                  flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}>
                   <Text style={{
-                    fontSize: 28, 
-                    fontWeight: 'bold', 
-                    color: '#FFFFFF', 
+                    fontSize: 28,
+                    fontWeight: 'bold',
+                    color: '#FFFFFF',
                     marginRight: 12
                   }}>
                     {gemBalance}
@@ -1765,17 +1778,17 @@ const HomeScreen = () => {
                       alignItems: 'center'
                     }}
                   >
-                    <MaterialCommunityIcons 
-                      name="diamond-stone" 
+                    <MaterialCommunityIcons
+                      name="diamond-stone"
                       size={18}
                       color="#FFFFFF"
                     />
                   </LinearGradient>
                 </View>
               </LinearGradient>
-              
+
               {/* Buy button */}
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={{
                   backgroundColor: '#6E69F4',
                   borderRadius: 100,
@@ -1793,8 +1806,8 @@ const HomeScreen = () => {
                 }}
               >
                 <Text style={{
-                  color: '#FFFFFF', 
-                  fontWeight: 'bold', 
+                  color: '#FFFFFF',
+                  fontWeight: 'bold',
                   fontSize: 14
                 }}>Buy More</Text>
               </TouchableOpacity>
@@ -1866,7 +1879,7 @@ const HomeScreen = () => {
   const [sliderValue, setSliderValue] = useState(10); // Default gems to convert
   const [sliderActive, setSliderActive] = useState(false);
   const [receiveShimmerKey, setReceiveShimmerKey] = useState(0);
-  
+
   // Animation values for gold popup
   const goldPopupOpacityRef = useRef(new Animated.Value(0));
   const goldPopupOpacity = goldPopupOpacityRef.current;
@@ -1877,22 +1890,22 @@ const HomeScreen = () => {
   const sliderPositionRef = useRef(new Animated.Value(0));
   const sliderPosition = sliderPositionRef.current;
   const sliderContainerWidth = useRef(0);
-  
+
   // Conversion rate: 1 gem = 36 gold
   const conversionRate = 36;
-  
+
   // Calculate gold to receive based on gems
   const goldToReceive = sliderValue * conversionRate;
-  
+
   // Maximum gems that can be converted (fixed upper limit regardless of balance)
   // Use a constant value for slider range, not dependent on gem balance
   const maxSliderValue = 100; // Set a fixed maximum value for the slider
-  
+
   // Show the gold conversion popup
   const showGoldConversionPopup = () => {
     setShowGoldPopup(true);
     setSliderValue(Math.min(10, maxSliderValue)); // Default to 10 gems
-    
+
     Animated.parallel([
       Animated.timing(goldPopupOpacity, {
         toValue: 1,
@@ -1906,7 +1919,7 @@ const HomeScreen = () => {
       })
     ]).start();
   };
-  
+
   // Hide the gold conversion popup
   const hideGoldConversionPopup = () => {
     Animated.parallel([
@@ -1924,7 +1937,7 @@ const HomeScreen = () => {
       setShowGoldPopup(false);
     });
   };
-  
+
   // Convert gems to gold with the current slider value
   const convertGemToGold = async () => {
     if (!user || isGuest) {
@@ -1948,7 +1961,7 @@ const HomeScreen = () => {
       Alert.alert('Insufficient Gems', `You need ${sliderValue} gems to make this conversion.`);
     }
   };
-  
+
   // Additional ref for tracking current position
   const startPositionRef = useRef(0);
 
@@ -1970,17 +1983,17 @@ const HomeScreen = () => {
       onPanResponderMove: (evt) => {
         // Get absolute touch position
         const pageX = evt.nativeEvent.pageX;
-        
+
         // Calculate slider position relative to the container's left edge
         const relativePosition = pageX - sliderContainerX;
-        
+
         // Ensure the position stays within bounds
         const boundedPosition = Math.max(0, Math.min(relativePosition, sliderContainerWidth.current));
-        
+
         // Update both slider position and fill width
         sliderPosition.setValue(boundedPosition);
         sliderWidth.setValue(boundedPosition);
-        
+
         // Calculate corresponding slider value
         const percentage = boundedPosition / sliderContainerWidth.current;
         const newValue = Math.round(percentage * maxSliderValue);
@@ -1992,14 +2005,14 @@ const HomeScreen = () => {
       },
     })
   ).current;
-  
+
   // Measure the slider container width and position
   const measureSliderWidth = (event: LayoutChangeEvent) => {
     const { width, x } = event.nativeEvent.layout;
     sliderContainerWidth.current = width;
     setSliderContainerX(x);
   };
-  
+
   // Update slider position when value changes
   useEffect(() => {
     if (sliderContainerWidth.current > 0) {
@@ -2009,7 +2022,7 @@ const HomeScreen = () => {
       sliderWidth.setValue(newPosition);
     }
   }, [sliderValue, maxSliderValue]);
-  
+
   // Update container position when popup is shown
   useEffect(() => {
     if (showGoldPopup) {
@@ -2150,7 +2163,7 @@ const HomeScreen = () => {
     if (eventEntries === 1) {
       return eventEntryCost; // Full refund of 100 gold
     }
-    
+
     // Otherwise, winner gets the prize pool (70% of all entries)
     // 70% of each 100 gold entry goes to prize pool
     return Math.floor(eventEntries * eventEntryCost * 0.7);
@@ -2283,17 +2296,17 @@ const HomeScreen = () => {
 
   // Function to add a notification when user wins an event
   const addEventWinNotification = (winAmount: number) => {
-    
+
     // Get the current count and increment it
     const newCount = counts.allNotifications + 1;
-    
+
     // Update the notification count in the context
     updateAllNotificationsCount(newCount);
-    
+
     // In a real app with proper state management, you would:
     // 1. Create a function in your NotificationContext to add a new notification
     // 2. Call that function with the notification details
-    
+
     // For demo purposes, this will update the notification badge counter
     // which is what the user will see in the UI
   };
@@ -2302,7 +2315,7 @@ const HomeScreen = () => {
   const showNotification = (message: string) => {
     // In a real app, you would use a notification system
     // For this demo, we'll just log to console
-    
+
     // Increment notification count
     const newCount = counts.allNotifications + 1;
     updateAllNotificationsCount(newCount);
@@ -2584,7 +2597,7 @@ const HomeScreen = () => {
   const renderGlobalChatButton = () => {
     return (
       <View style={{position: 'relative', marginBottom: 16}}>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => {
             setShowGlobalChatModal(true);
             Animated.timing(globalChatOpacity, {
@@ -2601,17 +2614,17 @@ const HomeScreen = () => {
           }]}
         >
           <View style={{
-            flexDirection: 'row', 
+            flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
             width: '100%'
           }}>
             {/* Left side - Title and icon */}
             <View style={{flexDirection: 'row', alignItems: 'center'}}>
-              <MaterialCommunityIcons 
-                name="chat" 
-                size={20} 
-                color="#4CAF50" 
+              <MaterialCommunityIcons
+                name="chat"
+                size={20}
+                color="#4CAF50"
                 style={{marginRight: 8}}
               />
               <Text style={{
@@ -2620,13 +2633,13 @@ const HomeScreen = () => {
                 fontWeight: 'bold',
               }}>Global Chat</Text>
             </View>
-            
+
             {/* Right side */}
             <View style={{flexDirection: 'row', alignItems: 'center'}}>
-              <MaterialCommunityIcons 
-                name="arrow-up" 
-                size={20} 
-                color="rgba(255,255,255,0.5)" 
+              <MaterialCommunityIcons
+                name="arrow-up"
+                size={20}
+                color="rgba(255,255,255,0.5)"
               />
             </View>
           </View>
@@ -2652,13 +2665,13 @@ const HomeScreen = () => {
           });
         }}
       >
-        <Animated.View 
+        <Animated.View
           style={[
             styles.modalOverlay,
             { opacity: globalChatOpacity }
           ]}
         >
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.modalOverlayTouchable}
             activeOpacity={1}
             onPress={() => {
@@ -2676,7 +2689,7 @@ const HomeScreen = () => {
             <View {...chatPanResponder.panHandlers} style={styles.swipeableArea}>
               {/* Handle for pulling down */}
               <View style={styles.globalChatHandle} />
-              
+
               {/* Chat Header */}
               <View style={styles.globalChatHeader}>
                 <Text style={styles.globalChatTitle}>Global Chat</Text>
@@ -2693,7 +2706,7 @@ const HomeScreen = () => {
                 </TouchableOpacity>
               </View>
             </View>
-            
+
             {/* Chat Messages */}
             <ScrollView
               style={styles.chatMessagesContainer}
@@ -2738,7 +2751,7 @@ const HomeScreen = () => {
                 ))
               )}
             </ScrollView>
-            
+
             {/* Error Message */}
             {globalChatError && (
               <View style={styles.errorContainer}>
@@ -2787,8 +2800,8 @@ const HomeScreen = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <CommonHeader 
-          title="Home" 
+        <CommonHeader
+          title="Home"
           rightIcons={[
             {
               name: 'logout',
@@ -2806,7 +2819,7 @@ const HomeScreen = () => {
             }
           ]}
         />
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.goldBalanceContainer}
           onPress={showGoldConversionPopup}
         >
@@ -2814,7 +2827,7 @@ const HomeScreen = () => {
           <Text style={styles.goldBalanceText}>{formatCurrencyCompact(goldBalance)}</Text>
         </TouchableOpacity>
       </View>
-      
+
       {/* Gold Conversion Popup Modal */}
       <Modal
         visible={showGoldPopup}
@@ -2834,8 +2847,8 @@ const HomeScreen = () => {
             activeOpacity={1}
             onPress={hideGoldConversionPopup}
           />
-          
-          <Animated.View 
+
+          <Animated.View
             style={[
               styles.goldPopupContainer,
               {
@@ -2845,7 +2858,7 @@ const HomeScreen = () => {
             ]}
           >
             <View style={styles.goldPopupHandle} />
-            
+
             <LinearGradient
               colors={['#0F1115', '#151821']}
               style={styles.goldPopupContent}
@@ -2945,7 +2958,7 @@ const HomeScreen = () => {
                   <Text style={styles.sliderMaxLabel}>{maxSliderValue}</Text>
                 </View>
               </View>
-              
+
               {/* Enhanced convert button with gold theme */}
               <View style={styles.convertButtonContainer}>
                 <TouchableOpacity
@@ -3040,7 +3053,15 @@ const HomeScreen = () => {
                       styles.avatarContainer,
                       { borderColor: yourSpotlightTimeLeft > 0 ? '#4CAF50' : 'transparent', marginRight: 0 }
                     ]}>
-                      <Image source={{ uri: profileImage || getDefaultSpotlightAvatar() }} style={styles.gridAvatar} />
+                      {profileImage ? (
+                        <Image source={{ uri: profileImage }} style={styles.gridAvatar} />
+                      ) : (
+                        <View style={[styles.gridAvatar, { backgroundColor: '#6E69F4', alignItems: 'center', justifyContent: 'center' }]}>
+                          <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>
+                            {(effectiveDisplayName).charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     <Text style={styles.nameLabel}>You</Text>
                     <Text style={yourSpotlightTimeLeft > 0 ? styles.statusLabel : styles.statusLabelInactive}>
@@ -3103,40 +3124,40 @@ const HomeScreen = () => {
             {renderRandomFriendWidgets()}
           </ScrollView>
         </View>
-        
+
         {/* New Minimal Event Widget */}
         {renderMinimalEventWidget()}
-        
+
         {/* New Minimal Gems Widget */}
         {renderMinimalGemsWidget()}
-        
+
         {/* Global Chat Button */}
         {renderGlobalChatButton()}
 
         {/* LiveStream Grid Section */}
         <LiveStreamGrid />
       </ScrollableContentContainer>
-      
+
       {/* Spotlight management modal */}
       <Modal visible={spotlightModalVisible} transparent animationType="none">
-        <Animated.View 
+        <Animated.View
           style={[
             styles.spotlightModalOverlay,
             { opacity: spotlightOverlayAnim }
           ]}
         >
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.spotlightModalBackground}
             activeOpacity={1}
             onPress={closeSpotlightModal}
           />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.spotlightModalContent}
             activeOpacity={1}
             onPress={(e) => e.stopPropagation()}
           >
             <Text style={styles.spotlightModalTitle}>Manage Your Spotlight</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.goldBalanceContainer}
               onPress={showGoldConversionPopup}
             >
@@ -3195,10 +3216,10 @@ const HomeScreen = () => {
         fuelRequired={15}
         fuelAvailable={20}
       />
-      
+
       {/* Add Global Chat Modal */}
       {renderGlobalChatModal()}
-      
+
 
     </SafeAreaView>
   );
@@ -3274,7 +3295,7 @@ const styles = StyleSheet.create({
     shadowRadius: 0,
     elevation: 0,
   },
-  
+
   // Horizontal Widgets Container
   horizontalWidgetContainer: {
     marginBottom: 16,
@@ -3283,7 +3304,7 @@ const styles = StyleSheet.create({
     overflow: 'visible',
     paddingVertical: 6,
   },
-  
+
   // Live Stream Widget Styles
   liveStreamContainer: {
     height: 110,
@@ -3439,7 +3460,7 @@ const styles = StyleSheet.create({
     borderColor: '#1D1E26',
     zIndex: 10,
   },
-  
+
   // Music Streaming Widget Styles
   musicStreamContainer: {
     height: 106,
@@ -3543,7 +3564,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.5)',
     fontSize: 14,
   },
-  
+
   // Event Widget Styles
   tournamentContainer: {
     borderRadius: 16,
@@ -3628,7 +3649,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-  
+
   // Completely Redesigned Gems Widget Styles
   gemsCard: {
     backgroundColor: '#1C1D23',
@@ -3679,12 +3700,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 12,
   },
-  
+
   // Content area
   gemsContent: {
     padding: 16,
   },
-  
+
   // Daily gems row (more subtle, informational)
   gemsDailyRow: {
     flexDirection: 'row',
@@ -3721,7 +3742,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
   },
-  
+
   // Available balance (highlighted as most important)
   availableBalanceContainer: {
     padding: 16,
@@ -3752,7 +3773,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  
+
   // Existing styles for Announcement and Mentions cards
   announcementCard: {
     backgroundColor: '#1C1D23',
@@ -3968,8 +3989,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: 'center',
-    position: 'absolute', 
-    top: 0, 
+    position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
     bottom: 0,
@@ -4737,4 +4758,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default HomeScreen; 
+export default HomeScreen;
