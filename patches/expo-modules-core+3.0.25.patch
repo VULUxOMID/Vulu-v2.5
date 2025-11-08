@@ -1,0 +1,22 @@
+diff --git a/node_modules/expo-modules-core/ios/Core/DynamicTypes/DynamicType.swift b/node_modules/expo-modules-core/ios/Core/DynamicTypes/DynamicType.swift
+index a50875a..fa9db71 100644
+--- a/node_modules/expo-modules-core/ios/Core/DynamicTypes/DynamicType.swift
++++ b/node_modules/expo-modules-core/ios/Core/DynamicTypes/DynamicType.swift
+@@ -19,11 +19,12 @@ private func DynamicType<T>(_ type: T.Type) -> AnyDynamicType {
+   if T.self == Void.self {
+     return DynamicVoidType.shared
+   }
+-  if T.self is Encodable.Type {
+-    // There is no dedicated `~` operator overload for encodables to avoid ambiguity
+-    // when the type is both `AnyArgument` and `Encodable` (e.g. strings, numeric types).
+-    return DynamicEncodableType.shared
+-  }
++  // Temporarily comment out to fix Xcode 16 compilation order issue
++  // if T.self is Encodable.Type {
++  //   // There is no dedicated `~` operator overload for encodables to avoid ambiguity
++  //   // when the type is both `AnyArgument` and `Encodable` (e.g. strings, numeric types).
++  //   return DynamicEncodableType.shared
++  // }
+   return DynamicRawType(innerType: T.self)
+ }
+ 
