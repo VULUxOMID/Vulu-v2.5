@@ -45,36 +45,50 @@ export default function Auth() {
 
   // Redirect authenticated users
   useEffect(() => {
-    if (!loading && !checkingOnboarding && user) {
-      // CRITICAL FIX: Handle guest users differently - they don't need onboarding
-      if (isGuest) {
-        // Guest users should go back to main app, not through onboarding
-        console.log('🎭 Guest user in auth screen, redirecting to main app');
-        router.replace('/(main)');
-        return;
-      }
+    if (loading || checkingOnboarding) return;
 
-      // CRITICAL FIX: Skip onboarding for newly registered users
-      if (justRegistered) {
-        console.log('✅ User just registered, skipping onboarding and going to main app');
-        clearRegistrationFlag(); // Clear the flag
-        router.replace('/(main)');
-        return;
-      }
+    if (!user) return;
 
-      // NEW: If profile is complete, go straight to main even if AsyncStorage flag is false
-      if (hasCompleteProfile) {
-        console.log('✅ User has complete profile, skipping onboarding');
-        router.replace('/(main)');
-        return;
-      }
-
-      if (onboardingCompleted) {
-        router.replace('/(main)');
-      }
-      // If onboarding not completed for regular users, stay in auth flow to show onboarding
+    // CRITICAL FIX: Handle guest users differently - they don't need onboarding
+    if (isGuest) {
+      console.log('🎭 Guest user in auth screen, redirecting to main app');
+      router.replace('/(main)');
+      return;
     }
-  }, [user, userProfile, loading, checkingOnboarding, onboardingCompleted, isGuest, justRegistered, router, clearRegistrationFlag, hasCompleteProfile]);
+
+    // CRITICAL FIX: Skip onboarding for newly registered users
+    if (justRegistered) {
+      console.log('✅ User just registered, skipping onboarding and going to main app');
+      clearRegistrationFlag();
+      router.replace('/(main)');
+      return;
+    }
+
+    // Check if onboarding is explicitly completed (from Firestore or AsyncStorage)
+    const completed =
+      Boolean(userProfile?.onboardingCompleted) || onboardingCompleted === true;
+
+    if (completed) {
+      console.log('✅ Onboarding completed, redirecting to main app');
+      router.replace('/(main)');
+      return;
+    }
+
+    // Else: stay in onboarding; no redirect
+    console.log('ℹ️ Onboarding not completed, showing onboarding screens');
+  }, [user, userProfile, loading, checkingOnboarding, onboardingCompleted, isGuest, justRegistered, router, clearRegistrationFlag]);
+
+  // Early return: If user is authenticated and onboarding is complete, redirect immediately
+  // This prevents any UI flash
+  if (!loading && !checkingOnboarding && user) {
+    const completed =
+      Boolean(userProfile?.onboardingCompleted) || onboardingCompleted === true;
+
+    if ((isGuest || justRegistered || completed) && !loading) {
+      // Don't render anything - the useEffect will handle the redirect
+      return null;
+    }
+  }
 
   // Show loading screen while checking authentication or onboarding
   if (loading || checkingOnboarding) {
@@ -85,26 +99,8 @@ export default function Auth() {
     );
   }
 
-  // If user is authenticated and onboarding is complete, show loading while redirecting
-  if (user && onboardingCompleted) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f1117' }}>
-        <ActivityIndicator size="large" color="#5865F2" />
-      </View>
-    );
-  }
-
-  // If user is authenticated but onboarding not complete, show onboarding
-  if (user && !onboardingCompleted) {
-    if (hasCompleteProfile) {
-      // Show a tiny loader while the effect redirects; prevents DOB flash
-      return (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f1117' }}>
-          <ActivityIndicator size="large" color="#5865F2" />
-        </View>
-      );
-    }
-    // Otherwise, show onboarding
+  // If user is authenticated but onboarding not complete, show onboarding screens
+  if (user && !onboardingCompleted && !userProfile?.onboardingCompleted) {
     return (
       <OnboardingProvider>
         <Suspense fallback={

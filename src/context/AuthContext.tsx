@@ -17,6 +17,7 @@ import { securityService } from '../services/securityService';
 import { profileSyncService } from '../services/profileSyncService';
 import { encryptionService } from '../services/encryptionService';
 import { PresenceService } from '../services/presenceService';
+import { secureCredentialService } from '../services/secureCredentialService';
 
 interface AuthContextType {
   user: User | GuestUser | null;
@@ -50,6 +51,13 @@ interface AuthContextType {
   signInWithBiometrics: () => Promise<boolean>;
   isBiometricAuthAvailable: () => Promise<boolean>;
   getBiometricTypeDescription: () => Promise<string>;
+  // Temporary debug data for on-screen chip
+  autoLoginDebug: {
+    attempted: boolean;
+    status: 'idle' | 'attempting' | 'success' | 'failed' | 'no-credentials';
+    hasSavedCredentials: boolean | null;
+    lastError?: string | null;
+  };
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -250,6 +258,83 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const safeTimer = useRef(new SafeTimer());
   const mounted = useRef(true);
 
+  // Auto-login tracking to prevent multiple attempts
+  const autoLoginAttempted = useRef(false);
+
+  // Temporary UI debug state for auto-login
+  const [autoLoginStatus, setAutoLoginStatus] = useState<'idle' | 'attempting' | 'success' | 'failed' | 'no-credentials'>('idle');
+  const [autoLoginAttemptedFlag, setAutoLoginAttemptedFlag] = useState(false);
+  const [hasSavedCredentials, setHasSavedCredentials] = useState<boolean | null>(null);
+  const [autoLoginError, setAutoLoginError] = useState<string | null>(null);
+
+  /**
+   * Helper to mark onboarding as completed in AsyncStorage
+   * Prevents onboarding screen flash on auto-login
+   */
+  const markOnboardingCompleted = async () => {
+    try {
+      await AsyncStorage.setItem('@onboarding_completed', 'true');
+      console.log('✅ Onboarding completion flag set');
+    } catch (e: any) {
+      console.warn('⚠️ Failed to set onboarding flag:', e?.message || e);
+    }
+  };
+
+  /**
+   * Attempt automatic sign-in using saved credentials
+   * Only runs once per app launch
+   */
+  const tryAutoLogin = async () => {
+    if (autoLoginAttempted.current) {
+      console.log('ℹ️ Auto-login already attempted this session');
+      return;
+    }
+
+    autoLoginAttempted.current = true;
+    setAutoLoginAttemptedFlag(true);
+    setAutoLoginError(null);
+
+    try {
+      // Don't auto-login if user is already signed in
+      const currentUser = authService.getCurrentUser();
+      if (currentUser) {
+        console.log('ℹ️ User already signed in, skipping auto-login');
+        setAutoLoginStatus('idle');
+        return;
+      }
+
+      // Check if credentials exist first
+      const hasCreds = await secureCredentialService.hasCredentials();
+      setHasSavedCredentials(hasCreds);
+
+      console.log('🔐 Attempting auto-login with saved credentials...');
+      setAutoLoginStatus('attempting');
+
+      const creds = await secureCredentialService.getCredentials();
+
+      if (creds?.email && creds?.password) {
+        console.log('🔑 Found saved credentials, signing in automatically...');
+        await authService.signIn(creds.email, creds.password);
+
+        // Mark onboarding as completed (auto-login = returning user)
+        await markOnboardingCompleted();
+
+        console.log('✅ Auto-login successful');
+        setAutoLoginStatus('success');
+      } else {
+        console.log('ℹ️ No saved credentials found for auto-login');
+        setAutoLoginStatus('no-credentials');
+      }
+    } catch (error: any) {
+      const msg = error?.message || String(error);
+      console.warn('⚠️ Auto-login failed:', msg);
+      setAutoLoginStatus('failed');
+      setAutoLoginError(msg);
+      // Don't throw - auto-login failure should be silent
+      // User can still sign in manually
+    }
+  };
+
   // Safe state setters to prevent Hermes crashes
   const safeSetUser = (newUser: User | GuestUser | null) => {
     try {
@@ -336,6 +421,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     initializeSession();
+
+    // Attempt auto-login with saved credentials
+    tryAutoLogin();
 
     // Set a maximum loading time to prevent infinite loading states using SafeTimer
     // Increased timeout to allow more time for auth state restoration
@@ -474,6 +562,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           safeSetUserProfile(null);
           safeSetIsGuest(false);
           console.log('✅ User state cleared - authentication selection required');
+
+          // Try auto-login with saved credentials if available
+          await tryAutoLogin();
         }
       }
 
@@ -523,6 +614,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Start new session
       await sessionService.startSession();
+
+      // Save credentials securely for auto-login
+      try {
+        await secureCredentialService.saveCredentials(userIdentifier, password);
+        console.log('✅ Credentials saved for auto-login');
+        setHasSavedCredentials(true);
+      } catch (credError) {
+        console.warn('⚠️ Failed to save credentials for auto-login:', credError);
+        // Don't fail the sign-in if credential saving fails
+      }
 
       // DIAGNOSTIC: Check auth persistence after sign-in
       try {
@@ -662,6 +763,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       safeSetUserProfile(null);
       safeSetIsGuest(false);
 
+      // Clear saved credentials for auto-login
+      try {
+        await secureCredentialService.clearCredentials();
+        console.log('✅ Saved credentials cleared');
+        setHasSavedCredentials(false);
+      } catch (credError) {
+        console.warn('⚠️ Failed to clear saved credentials:', credError);
+        // Continue with sign-out even if credential clearing fails
+      }
+
       // CRITICAL FIX: Clear ALL cached authentication data with error handling
       await safeAsyncStorage.multiRemove([
         'guestUser',
@@ -669,7 +780,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         'authToken',
         'lastLoginMethod',
         'biometricEnabled',
-        'rememberMe'
+        'rememberMe',
+        '@onboarding_completed' // Clear onboarding flag on sign-out
       ]);
 
       // End session
@@ -709,6 +821,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Also emergency stop any running operations
       const presenceService = PresenceService.getInstance();
       presenceService.emergencyStop();
+
+      // Clear saved credentials
+      try {
+        await secureCredentialService.clearCredentials();
+        setHasSavedCredentials(false);
+      } catch (credError) {
+        console.warn('⚠️ Failed to clear saved credentials:', credError);
+      }
 
       // Clear AsyncStorage with enhanced error handling
       await safeAsyncStorage.multiRemove([
@@ -1022,6 +1142,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isOnboardingComplete,
     markRegistrationComplete, // ADDED: Mark registration complete
     clearRegistrationFlag, // ADDED: Clear registration flag
+    // Temporary debug data for on-screen chip
+    autoLoginDebug: {
+      attempted: autoLoginAttemptedFlag,
+      status: autoLoginStatus,
+      hasSavedCredentials,
+      lastError: autoLoginError,
+    },
   };
 
   return (
