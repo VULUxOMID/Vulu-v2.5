@@ -2,64 +2,31 @@ import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { AuthColors } from '../components/auth/AuthDesignSystem';
 
-// Import onboarding screens (will be created in Phase 3)
-import AgeGateScreen from '../screens/onboarding/AgeGateScreen';
+// Import new onboarding screens
+import ContactMethodScreen from '../screens/onboarding/ContactMethodScreen';
 import UsernameScreen from '../screens/onboarding/UsernameScreen';
-import EmailScreen from '../screens/onboarding/EmailScreen';
 import PasswordScreen from '../screens/onboarding/PasswordScreen';
-import TermsScreen from '../screens/onboarding/TermsScreen';
-import PermissionsIntroScreen from '../screens/onboarding/PermissionsIntroScreen';
-import NotificationsPermissionScreen from '../screens/onboarding/NotificationsPermissionScreen';
-import AvatarPickerScreen from '../screens/onboarding/AvatarPickerScreen';
-import ThemeChoiceScreen from '../screens/onboarding/ThemeChoiceScreen';
-import InterestsScreen from '../screens/onboarding/InterestsScreen';
-import ContactsIntroScreen from '../screens/onboarding/ContactsIntroScreen';
-import ContactsPermissionScreen from '../screens/onboarding/ContactsPermissionScreen';
-import PhoneIntroScreen from '../screens/onboarding/PhoneIntroScreen';
-import PhoneVerificationScreen from '../screens/onboarding/PhoneVerificationScreen';
-import SuccessScreen from '../screens/onboarding/SuccessScreen';
-import HomeHandoffScreen from '../screens/onboarding/HomeHandoffScreen';
+import ProfileScreen from '../screens/onboarding/ProfileScreen';
+import FinishScreen from '../screens/onboarding/FinishScreen';
 
 // Define onboarding navigation params
 export type OnboardingStackParamList = {
-  AgeGate: undefined;
+  ContactMethod: undefined;
   Username: undefined;
-  Email: undefined;
   Password: undefined;
-  Terms: undefined;
-  PermissionsIntro: undefined;
-  NotificationsPermission: undefined;
-  AvatarPicker: undefined;
-  ThemeChoice: undefined;
-  Interests: undefined;
-  ContactsIntro: undefined;
-  ContactsPermission: undefined;
-  PhoneIntro: undefined;
-  PhoneVerification: { phoneNumber?: string };
-  Success: undefined;
-  HomeHandoff: undefined;
+  Profile: undefined;
+  Finish: undefined;
 };
 
 const Stack = createStackNavigator<OnboardingStackParamList>();
 
 // Onboarding step configuration
 export const ONBOARDING_STEPS = [
-  { key: 'AgeGate', step: 1, title: 'Age Verification' },
+  { key: 'ContactMethod', step: 1, title: 'Contact Method' },
   { key: 'Username', step: 2, title: 'Username' },
-  { key: 'Email', step: 3, title: 'Email' },
-  { key: 'Password', step: 4, title: 'Password' },
-  { key: 'Terms', step: 5, title: 'Terms & Privacy' },
-  { key: 'PermissionsIntro', step: 6, title: 'Permissions' },
-  { key: 'NotificationsPermission', step: 7, title: 'Notifications' },
-  { key: 'AvatarPicker', step: 8, title: 'Avatar' },
-  { key: 'ThemeChoice', step: 9, title: 'Theme' },
-  { key: 'Interests', step: 10, title: 'Interests' },
-  { key: 'ContactsIntro', step: 11, title: 'Contacts' },
-  { key: 'ContactsPermission', step: 12, title: 'Contacts Permission' },
-  { key: 'PhoneIntro', step: 13, title: 'Phone Number' },
-  { key: 'PhoneVerification', step: 14, title: 'Verification' },
-  { key: 'Success', step: 15, title: 'Success' },
-  { key: 'HomeHandoff', step: 16, title: 'Welcome to VuluGO' },
+  { key: 'Password', step: 3, title: 'Password' },
+  { key: 'Profile', step: 4, title: 'Profile' },
+  { key: 'Finish', step: 5, title: 'Finish' },
 ] as const;
 
 export const TOTAL_ONBOARDING_STEPS = ONBOARDING_STEPS.length;
@@ -94,7 +61,7 @@ export const getPreviousStep = (currentStep: keyof OnboardingStackParamList): ke
 const OnboardingNavigator: React.FC = () => {
   return (
     <Stack.Navigator
-      initialRouteName="AgeGate"
+      initialRouteName="ContactMethod"
       screenOptions={{
         headerShown: false,
         gestureEnabled: true,
@@ -103,36 +70,19 @@ const OnboardingNavigator: React.FC = () => {
         presentation: 'card',
       }}
     >
-      <Stack.Screen 
-        name="AgeGate" 
-        component={AgeGateScreen}
+      <Stack.Screen
+        name="ContactMethod"
+        component={ContactMethodScreen}
         options={{
           gestureEnabled: false, // Disable back gesture on first screen
         }}
       />
       <Stack.Screen name="Username" component={UsernameScreen} />
-      <Stack.Screen name="Email" component={EmailScreen} />
       <Stack.Screen name="Password" component={PasswordScreen} />
-      <Stack.Screen name="Terms" component={TermsScreen} />
-      <Stack.Screen name="PermissionsIntro" component={PermissionsIntroScreen} />
-      <Stack.Screen name="NotificationsPermission" component={NotificationsPermissionScreen} />
-      <Stack.Screen name="AvatarPicker" component={AvatarPickerScreen} />
-      <Stack.Screen name="ThemeChoice" component={ThemeChoiceScreen} />
-      <Stack.Screen name="Interests" component={InterestsScreen} />
-      <Stack.Screen name="ContactsIntro" component={ContactsIntroScreen} />
-      <Stack.Screen name="ContactsPermission" component={ContactsPermissionScreen} />
-      <Stack.Screen name="PhoneIntro" component={PhoneIntroScreen} />
-      <Stack.Screen name="PhoneVerification" component={PhoneVerificationScreen} />
-      <Stack.Screen 
-        name="Success" 
-        component={SuccessScreen}
-        options={{
-          gestureEnabled: false, // Disable back gesture on success screen
-        }}
-      />
-      <Stack.Screen 
-        name="HomeHandoff" 
-        component={HomeHandoffScreen}
+      <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen
+        name="Finish"
+        component={FinishScreen}
         options={{
           gestureEnabled: false, // Disable back gesture on final screen
         }}

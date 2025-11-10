@@ -3,31 +3,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Onboarding data interface
 export interface OnboardingData {
-  // Basic account info
+  // Contact method (email or phone - at least one required)
   email: string;
+  phoneNumber: string;
+
+  // Basic account info
   username: string;
   password: string;
   displayName: string;
-  dateOfBirth: Date | null;
-  
-  // Preferences
-  theme: 'dark' | 'light';
-  interests: string[];
-  
-  // Permissions
-  notificationsEnabled: boolean;
-  contactsPermissionGranted: boolean;
-  
+
   // Profile
   avatarUri: string | null;
-  
-  // Phone verification
-  phoneNumber: string;
-  phoneVerified: boolean;
-  
-  // Terms
-  termsAccepted: boolean;
-  privacyAccepted: boolean;
 }
 
 // Onboarding context interface
@@ -61,19 +47,11 @@ interface OnboardingContextType {
 // Default onboarding data
 const defaultOnboardingData: OnboardingData = {
   email: '',
+  phoneNumber: '',
   username: '',
   password: '',
   displayName: '',
-  dateOfBirth: null,
-  theme: 'dark',
-  interests: [],
-  notificationsEnabled: false,
-  contactsPermissionGranted: false,
   avatarUri: null,
-  phoneNumber: '',
-  phoneVerified: false,
-  termsAccepted: false,
-  privacyAccepted: false,
 };
 
 // Create context
@@ -92,7 +70,7 @@ export const OnboardingProvider: React.FC<OnboardingProviderProps> = ({ children
   const [onboardingData, setOnboardingData] = useState<OnboardingData>(defaultOnboardingData);
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
-  const totalSteps = 16;
+  const totalSteps = 5;
 
   // Update onboarding data
   const updateOnboardingData = useCallback((updates: Partial<OnboardingData>) => {
@@ -129,13 +107,15 @@ export const OnboardingProvider: React.FC<OnboardingProviderProps> = ({ children
   // Validation for each step
   const getNextStepValidation = useCallback((): string | null => {
     switch (currentStep) {
-      case 1: // Age Gate
-        if (!onboardingData.dateOfBirth) {
-          return 'Please enter your date of birth';
+      case 1: // ContactMethod
+        if (!onboardingData.email.trim() && !onboardingData.phoneNumber.trim()) {
+          return 'Please enter either an email or phone number';
         }
-        const age = new Date().getFullYear() - onboardingData.dateOfBirth.getFullYear();
-        if (age < 13) {
-          return 'You must be at least 13 years old to use this app';
+        if (onboardingData.email.trim()) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(onboardingData.email)) {
+            return 'Please enter a valid email address';
+          }
         }
         return null;
       case 2: // Username
@@ -146,16 +126,7 @@ export const OnboardingProvider: React.FC<OnboardingProviderProps> = ({ children
           return 'Username must be at least 3 characters';
         }
         return null;
-      case 3: // Email
-        if (!onboardingData.email.trim()) {
-          return 'Please enter your email';
-        }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(onboardingData.email)) {
-          return 'Please enter a valid email address';
-        }
-        return null;
-      case 4: // Password
+      case 3: // Password
         if (!onboardingData.password) {
           return 'Please enter a password';
         }
@@ -163,13 +134,12 @@ export const OnboardingProvider: React.FC<OnboardingProviderProps> = ({ children
           return 'Password must be at least 8 characters';
         }
         return null;
-      case 5: // Terms
-        if (!onboardingData.termsAccepted) {
-          return 'Please accept the terms and conditions';
-        }
+      case 4: // Profile (optional)
+        return null;
+      case 5: // Finish
         return null;
       default:
-        return null; // Other steps don't require validation
+        return null;
     }
   }, [currentStep, onboardingData]);
 
@@ -181,10 +151,7 @@ export const OnboardingProvider: React.FC<OnboardingProviderProps> = ({ children
   // Save onboarding progress to AsyncStorage
   const saveOnboardingProgress = useCallback(async () => {
     try {
-      await AsyncStorage.setItem(ONBOARDING_DATA_KEY, JSON.stringify({
-        ...onboardingData,
-        dateOfBirth: onboardingData.dateOfBirth?.toISOString() || null,
-      }));
+      await AsyncStorage.setItem(ONBOARDING_DATA_KEY, JSON.stringify(onboardingData));
       await AsyncStorage.setItem(ONBOARDING_PROGRESS_KEY, JSON.stringify({
         currentStep,
         completedSteps,
@@ -203,10 +170,7 @@ export const OnboardingProvider: React.FC<OnboardingProviderProps> = ({ children
 
       if (dataString) {
         const data = JSON.parse(dataString);
-        setOnboardingData({
-          ...data,
-          dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
-        });
+        setOnboardingData(data);
       }
 
       if (progressString) {

@@ -74,167 +74,96 @@ export const validatePassword = (password: string): ValidationResult => {
   return { isValid: true };
 };
 
-// Age validation
-export const validateAge = (dateOfBirth: Date | null): ValidationResult => {
-  if (!dateOfBirth) {
-    return { isValid: false, error: 'Date of birth is required' };
-  }
-  
-  const today = new Date();
-  const age = today.getFullYear() - dateOfBirth.getFullYear();
-  const monthDiff = today.getMonth() - dateOfBirth.getMonth();
-  
-  // Adjust age if birthday hasn't occurred this year
-  const actualAge = monthDiff < 0 || (monthDiff === 0 && today.getDate() < dateOfBirth.getDate()) 
-    ? age - 1 
-    : age;
-  
-  if (actualAge < 13) {
-    return { isValid: false, error: 'You must be at least 13 years old to use this app' };
-  }
-  
-  if (actualAge > 120) {
-    return { isValid: false, error: 'Please enter a valid date of birth' };
-  }
-  
-  return { isValid: true };
-};
-
-// Phone number validation
+// Phone number validation (optional)
 export const validatePhoneNumber = (phoneNumber: string): ValidationResult => {
   if (!phoneNumber.trim()) {
     return { isValid: false, error: 'Phone number is required' };
   }
-  
+
   // Remove all non-digit characters for validation
   const digitsOnly = phoneNumber.replace(/\D/g, '');
-  
+
   if (digitsOnly.length < 10) {
     return { isValid: false, error: 'Phone number must be at least 10 digits' };
   }
-  
+
   if (digitsOnly.length > 15) {
     return { isValid: false, error: 'Phone number must be less than 15 digits' };
   }
-  
+
   return { isValid: true };
 };
 
-// Verification code validation
-export const validateVerificationCode = (code: string): ValidationResult => {
-  if (!code.trim()) {
-    return { isValid: false, error: 'Verification code is required' };
-  }
-  
-  if (code.length !== 6) {
-    return { isValid: false, error: 'Verification code must be 6 digits' };
-  }
-  
-  if (!/^\d{6}$/.test(code)) {
-    return { isValid: false, error: 'Verification code must contain only numbers' };
-  }
-  
-  return { isValid: true };
-};
-
-// Terms acceptance validation
-export const validateTermsAcceptance = (termsAccepted: boolean): ValidationResult => {
-  if (!termsAccepted) {
-    return { isValid: false, error: 'You must accept the terms and conditions to continue' };
-  }
-  
-  return { isValid: true };
-};
-
-// Interests validation
-export const validateInterests = (interests: string[]): ValidationResult => {
-  if (interests.length === 0) {
-    return { isValid: false, error: 'Please select at least one interest' };
-  }
-  
-  if (interests.length > 10) {
-    return { isValid: false, error: 'Please select no more than 10 interests' };
-  }
-  
-  return { isValid: true };
-};
-
-// Step-specific validation
+// Step-specific validation for new 5-step flow
 export const validateStep = (step: number, data: OnboardingData): ValidationResult => {
   switch (step) {
-    case 1: // Welcome
+    case 1: // ContactMethod
+      // At least one contact method required
+      if (!data.email.trim() && !data.phoneNumber.trim()) {
+        return { isValid: false, error: 'Please provide at least one contact method' };
+      }
+      // Validate email if provided
+      if (data.email.trim()) {
+        const emailValidation = validateEmail(data.email);
+        if (!emailValidation.isValid) {
+          return emailValidation;
+        }
+      }
+      // Validate phone if provided
+      if (data.phoneNumber.trim()) {
+        const phoneValidation = validatePhoneNumber(data.phoneNumber);
+        if (!phoneValidation.isValid) {
+          return phoneValidation;
+        }
+      }
       return { isValid: true };
-      
-    case 2: // Age Gate
-      return validateAge(data.dateOfBirth);
-      
-    case 3: // Username
+
+    case 2: // Username
       return validateUsername(data.username);
-      
-    case 4: // Email
-      return validateEmail(data.email);
-      
-    case 5: // Password
+
+    case 3: // Password
       return validatePassword(data.password);
-      
-    case 6: // Terms
-      return validateTermsAcceptance(data.termsAccepted);
-      
-    case 7: // Permissions Intro
+
+    case 4: // Profile (optional)
       return { isValid: true };
-      
-    case 8: // Notifications Permission
+
+    case 5: // Finish
       return { isValid: true };
-      
-    case 9: // Avatar Picker
-      return { isValid: true }; // Avatar is optional
-      
-    case 10: // Theme Choice
-      return { isValid: true }; // Theme has default
-      
-    case 11: // Interests
-      return validateInterests(data.interests);
-      
-    case 12: // Contacts Intro
-      return { isValid: true };
-      
-    case 13: // Contacts Permission
-      return { isValid: true };
-      
-    case 14: // Phone Intro
-      return { isValid: true };
-      
-    case 15: // Phone Verification
-      return validatePhoneNumber(data.phoneNumber);
-      
-    case 16: // Success
-      return { isValid: true };
-      
-    case 17: // Home Handoff
-      return { isValid: true };
-      
+
     default:
       return { isValid: false, error: 'Invalid step' };
   }
 };
 
-// Complete onboarding validation
+// Complete onboarding validation for new 5-step flow
 export const validateCompleteOnboarding = (data: OnboardingData): ValidationResult => {
   // Check all required fields
   const requiredValidations = [
-    validateAge(data.dateOfBirth),
     validateUsername(data.username),
-    validateEmail(data.email),
     validatePassword(data.password),
-    validateTermsAcceptance(data.termsAccepted),
   ];
-  
+
+  // At least one contact method required
+  if (!data.email.trim() && !data.phoneNumber.trim()) {
+    return { isValid: false, error: 'Please provide at least one contact method' };
+  }
+
+  // Validate email if provided
+  if (data.email.trim()) {
+    requiredValidations.push(validateEmail(data.email));
+  }
+
+  // Validate phone if provided
+  if (data.phoneNumber.trim()) {
+    requiredValidations.push(validatePhoneNumber(data.phoneNumber));
+  }
+
   for (const validation of requiredValidations) {
     if (!validation.isValid) {
       return validation;
     }
   }
-  
+
   return { isValid: true };
 };
 

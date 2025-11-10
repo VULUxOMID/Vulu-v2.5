@@ -17,9 +17,11 @@ type PasswordScreenNavigationProp = StackNavigationProp<OnboardingStackParamList
 const PasswordScreen: React.FC = () => {
   const navigation = useNavigation<PasswordScreenNavigationProp>();
   const { onboardingData, updateOnboardingData, markStepCompleted, currentStep } = useOnboarding();
-  
+
   const [password, setPassword] = useState(onboardingData.password || '');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string>('');
+  const [confirmError, setConfirmError] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
   const handleBack = () => navigation.goBack();
@@ -35,6 +37,7 @@ const PasswordScreen: React.FC = () => {
   const handleContinue = () => {
     setLoading(true);
     setError('');
+    setConfirmError('');
 
     const validation = validatePassword(password);
     if (!validation.isValid) {
@@ -43,12 +46,18 @@ const PasswordScreen: React.FC = () => {
       return;
     }
 
+    if (password !== confirmPassword) {
+      setConfirmError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
+
     updateOnboardingData({ password });
-    markStepCompleted(5);
-    
+    markStepCompleted(3);
+
     setTimeout(() => {
       setLoading(false);
-      navigation.navigate('Terms');
+      navigation.navigate('Profile');
     }, 500);
   };
 
@@ -69,12 +78,22 @@ const PasswordScreen: React.FC = () => {
             helperText="Use at least 8 characters with letters and numbers"
             showStrengthIndicator={true}
           />
+
+          <OnboardingPasswordInput
+            label="Confirm Password"
+            value={confirmPassword}
+            onChangeText={(text) => { setConfirmPassword(text); setConfirmError(''); }}
+            placeholder="Re-enter your password"
+            error={confirmError}
+            helperText="Make sure both passwords match"
+            showStrengthIndicator={false}
+          />
         </View>
       </OnboardingFormCard>
       <OnboardingFooter
         primaryButtonText={loading ? 'Creating...' : 'Continue'}
         onPrimaryPress={handleContinue}
-        primaryButtonDisabled={loading || password.length < 8}
+        primaryButtonDisabled={loading || password.length < 8 || confirmPassword.length < 8}
         primaryButtonLoading={loading}
         currentStep={currentStep}
       />
@@ -86,7 +105,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: AuthColors.background },
   title: { ...AuthTypography.onboardingTitle, marginBottom: 8 },
   subtitle: { ...AuthTypography.bodyText, textAlign: 'center', paddingHorizontal: 16 },
-  formContent: { paddingTop: 16 },
+  formContent: { paddingTop: 16, gap: 24 },
 });
 
 export default PasswordScreen;

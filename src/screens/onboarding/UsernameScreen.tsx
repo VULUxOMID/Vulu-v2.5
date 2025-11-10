@@ -109,11 +109,11 @@ const UsernameScreen: React.FC = () => {
 
     // Save username and continue
     updateOnboardingData({ username, displayName: username });
-    markStepCompleted(3);
-    
+    markStepCompleted(2);
+
     setTimeout(() => {
       setLoading(false);
-      navigation.navigate('Email');
+      navigation.navigate('Password');
     }, 500);
   };
 
