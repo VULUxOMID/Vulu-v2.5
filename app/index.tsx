@@ -10,9 +10,10 @@ function AuthenticationRouter() {
   // Safely get auth context - returns null if provider not ready
   const authContext = useAuthSafe();
 
-  // Extract user and loading from context if available
+  // Extract user, loading, and authReady from context if available
   const user = authContext?.user;
   const loading = authContext?.loading;
+  const authReady = authContext?.authReady;
   const clearRegistrationFlag = authContext?.clearRegistrationFlag;
 
   useEffect(() => {
@@ -22,17 +23,19 @@ function AuthenticationRouter() {
       return;
     }
 
-    // CRITICAL: Don't navigate while loading is true - wait for auth to finish
-    if (loading === true) {
-      console.log('🔄 Authentication still loading, waiting...');
+    // CRITICAL: Don't navigate until authReady is true
+    // This ensures Firebase auth state has been determined AND auto-login has completed
+    if (!authReady) {
+      console.log('⏳ Waiting for auth to be ready...', { loading, authReady });
       return;
     }
 
-    // Only proceed when loading is explicitly false
-    console.log('🔍 Authentication check:', {
+    // Only proceed when authReady is true
+    console.log('🔍 Authentication ready, making routing decision:', {
       hasUser: !!user,
       userType: user ? (user.isGuest ? 'guest' : 'authenticated') : 'none',
-      loading
+      loading,
+      authReady
     });
 
     if (user) {
@@ -50,7 +53,7 @@ function AuthenticationRouter() {
       console.log('🚫 No user found, showing authentication selection');
       router.replace('/auth');
     }
-  }, [user, loading, router, authContext, clearRegistrationFlag]);
+  }, [user, loading, authReady, router, authContext, clearRegistrationFlag]);
 
   // If auth context is not available, show loading
   if (!authContext) {
@@ -69,7 +72,7 @@ function AuthenticationRouter() {
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#131318' }}>
       <ActivityIndicator size="large" color="#6E69F4" />
       <Text style={{ color: '#FFFFFF', marginTop: 16, fontSize: 16 }}>
-        {loading ? 'Checking authentication...' : 'Loading VuluGO...'}
+        {!authReady ? 'Checking authentication...' : 'Loading VuluGO...'}
       </Text>
     </View>
   );

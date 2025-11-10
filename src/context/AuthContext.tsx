@@ -23,6 +23,7 @@ interface AuthContextType {
   user: User | GuestUser | null;
   userProfile: any | null;
   loading: boolean;
+  authReady: boolean; // ADDED: True when auth state is determined and auto-login is complete
   isGuest: boolean;
   justRegistered: boolean; // ADDED: Track if user just completed registration
   signIn: (email: string, password: string) => Promise<void>;
@@ -251,6 +252,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | GuestUser | null>(null);
   const [userProfile, setUserProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false); // ADDED: True when auth state is determined
   const [isGuest, setIsGuest] = useState(false);
   const [justRegistered, setJustRegistered] = useState(false); // ADDED: Track registration completion
 
@@ -260,6 +262,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Auto-login tracking to prevent multiple attempts
   const autoLoginAttempted = useRef(false);
+  const authStateReceived = useRef(false); // Track if onAuthStateChange has fired
 
   // Temporary UI debug state for auto-login
   const [autoLoginStatus, setAutoLoginStatus] = useState<'idle' | 'attempting' | 'success' | 'failed' | 'no-credentials'>('idle');
@@ -386,6 +389,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const safeSetAuthReady = (newAuthReady: boolean) => {
+    try {
+      if (mounted.current) {
+        setAuthReady(newAuthReady);
+        console.log('🎯 Auth ready state changed:', newAuthReady);
+      }
+    } catch (error) {
+      console.error('[AuthContext] Safe setAuthReady failed:', error);
+    }
+  };
+
 
 
   useEffect(() => {
@@ -436,6 +450,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const unsubscribe = authService.onAuthStateChange(async (firebaseUser) => {
       if (!mounted.current) return;
+
+      // Mark that we've received the first auth state event
+      authStateReceived.current = true;
 
       // Clear timeout since we got a response
       safeTimer.current.clearTimeout(loadingTimeout);
@@ -570,6 +587,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (mounted.current) {
         safeSetLoading(false);
+
+        // CRITICAL: Set authReady to true after auth state is determined
+        // This happens after onAuthStateChange has fired and we've processed the user state
+        // For users with firebaseUser: profile has been loaded
+        // For users without firebaseUser: tryAutoLogin has been attempted
+        safeSetAuthReady(true);
       }
     });
 
@@ -1115,6 +1138,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     userProfile,
     loading,
+    authReady, // ADDED: True when auth state is determined
     isGuest,
     justRegistered, // ADDED: Registration completion flag
     signIn,
