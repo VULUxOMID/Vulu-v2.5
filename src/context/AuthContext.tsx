@@ -24,6 +24,8 @@ interface AuthContextType {
   userProfile: any | null;
   loading: boolean;
   authReady: boolean; // ADDED: True when auth state is determined and auto-login is complete
+  hasLocalSession: boolean; // ADDED: True if local session token exists and user is restored
+  sessionVerified: boolean; // ADDED: True after Firebase verifies the session token
   isGuest: boolean;
   justRegistered: boolean; // ADDED: Track if user just completed registration
   signIn: (email: string, password: string) => Promise<void>;
@@ -253,6 +255,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [userProfile, setUserProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false); // ADDED: True when auth state is determined
+  const [hasLocalSession, setHasLocalSession] = useState(false); // ADDED: True if local session exists
+  const [sessionVerified, setSessionVerified] = useState(false); // ADDED: True after Firebase verification
   const [isGuest, setIsGuest] = useState(false);
   const [justRegistered, setJustRegistered] = useState(false); // ADDED: Track registration completion
 
@@ -338,6 +342,89 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  /**
+   * Restore session from saved token for instant app launch (Discord-style)
+   * Shows main app immediately while verifying token in background
+   */
+  const restoreSessionFromToken = async (): Promise<void> => {
+    try {
+      console.log('🚀 Attempting instant session restoration...');
+
+      // Check if we have a saved session token
+      const session = await secureCredentialService.getSessionToken();
+
+      if (!session) {
+        console.log('ℹ️ No saved session token found');
+        safeSetHasLocalSession(false);
+        safeSetSessionVerified(false);
+        return;
+      }
+
+      console.log('💾 Found saved session, restoring user instantly...');
+
+      // Get the current Firebase user (should be restored by Firebase persistence)
+      const currentUser = authService.getCurrentUser();
+
+      if (currentUser && currentUser.uid === session.userId) {
+        console.log('✅ Firebase user already restored from persistence');
+
+        // Set user immediately for instant UI
+        safeSetUser(currentUser);
+        safeSetIsGuest(false);
+        safeSetHasLocalSession(true);
+
+        // Load user profile in background
+        safeAsync(async () => {
+          const profile = await firestoreService.getUser(currentUser.uid);
+          if (profile && mounted.current) {
+            safeSetUserProfile(profile);
+            console.log('✅ User profile loaded for instant session');
+          }
+        }, null, 'restoreSession.loadProfile');
+
+        // Mark onboarding as completed (returning user)
+        await markOnboardingCompleted();
+
+        // Verify token in background
+        safeAsync(async () => {
+          try {
+            // Try to get a fresh ID token to verify the session is still valid
+            const { getIdToken } = await import('firebase/auth');
+            await getIdToken(currentUser, true); // Force refresh
+
+            console.log('✅ Session token verified successfully');
+            safeSetSessionVerified(true);
+
+            // Start profile sync after verification
+            profileSyncService.startProfileSync(currentUser.uid);
+
+            // Initialize encryption
+            await encryptionService.initialize(currentUser.uid);
+          } catch (verifyError: any) {
+            console.warn('⚠️ Session token verification failed:', verifyError?.message || verifyError);
+
+            // Token is invalid - sign out and clear
+            safeSetSessionVerified(false);
+            await signOut();
+          }
+        }, undefined, 'restoreSession.verifyToken');
+
+      } else {
+        console.log('ℹ️ No Firebase user found or UID mismatch, clearing saved session');
+        await secureCredentialService.clearSessionToken();
+        safeSetHasLocalSession(false);
+        safeSetSessionVerified(false);
+      }
+
+    } catch (error: any) {
+      console.error('❌ Session restoration failed:', error?.message || error);
+      safeSetHasLocalSession(false);
+      safeSetSessionVerified(false);
+      // Clear invalid session
+      await secureCredentialService.clearSessionToken();
+    }
+  };
+
   // Safe state setters to prevent Hermes crashes
   const safeSetUser = (newUser: User | GuestUser | null) => {
     try {
@@ -400,6 +487,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const safeSetHasLocalSession = (newHasLocalSession: boolean) => {
+    try {
+      if (mounted.current) {
+        setHasLocalSession(newHasLocalSession);
+        console.log('💾 Local session state changed:', newHasLocalSession);
+      }
+    } catch (error) {
+      console.error('[AuthContext] Safe setHasLocalSession failed:', error);
+    }
+  };
+
+  const safeSetSessionVerified = (newSessionVerified: boolean) => {
+    try {
+      if (mounted.current) {
+        setSessionVerified(newSessionVerified);
+        console.log('✅ Session verified state changed:', newSessionVerified);
+      }
+    } catch (error) {
+      console.error('[AuthContext] Safe setSessionVerified failed:', error);
+    }
+  };
+
 
 
   useEffect(() => {
@@ -436,7 +545,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     initializeSession();
 
-    // Attempt auto-login with saved credentials
+    // CRITICAL: Try instant session restoration FIRST (Discord-style)
+    // This shows the main app immediately if a valid session exists
+    restoreSessionFromToken();
+
+    // Attempt auto-login with saved credentials (fallback if no session token)
     tryAutoLogin();
 
     // Set a maximum loading time to prevent infinite loading states using SafeTimer
@@ -648,6 +761,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Don't fail the sign-in if credential saving fails
       }
 
+      // Save session token for instant app launch (Discord-style)
+      try {
+        const currentUser = authService.getCurrentUser();
+        if (currentUser && currentUser.refreshToken) {
+          await secureCredentialService.saveSessionToken(currentUser.uid, currentUser.refreshToken);
+          console.log('✅ Session token saved for instant launch');
+          safeSetHasLocalSession(true);
+          safeSetSessionVerified(true);
+        }
+      } catch (tokenError) {
+        console.warn('⚠️ Failed to save session token:', tokenError);
+        // Don't fail the sign-in if token saving fails
+      }
+
       // DIAGNOSTIC: Check auth persistence after sign-in
       try {
         const { checkAuthPersistence } = await import('../services/firebase');
@@ -700,6 +827,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Start new session
       await sessionService.startSession();
+
+      // Save session token for instant app launch (Discord-style)
+      try {
+        const currentUser = authService.getCurrentUser();
+        if (currentUser && currentUser.refreshToken) {
+          await secureCredentialService.saveSessionToken(currentUser.uid, currentUser.refreshToken);
+          console.log('✅ Session token saved for instant launch after signup');
+          safeSetHasLocalSession(true);
+          safeSetSessionVerified(true);
+        }
+      } catch (tokenError) {
+        console.warn('⚠️ Failed to save session token after signup:', tokenError);
+        // Don't fail the sign-up if token saving fails
+      }
     } catch (error: any) {
       // Enhanced error handling with proper Firebase error codes
       console.error('❌ SignUp error in AuthContext:', error);
@@ -796,6 +937,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Continue with sign-out even if credential clearing fails
       }
 
+      // Clear saved session token to prevent instant login
+      try {
+        await secureCredentialService.clearSessionToken();
+        console.log('✅ Session token cleared');
+        safeSetHasLocalSession(false);
+        safeSetSessionVerified(false);
+      } catch (tokenError) {
+        console.warn('⚠️ Failed to clear session token:', tokenError);
+        // Continue with sign-out even if token clearing fails
+      }
+
       // CRITICAL FIX: Clear ALL cached authentication data with error handling
       await safeAsyncStorage.multiRemove([
         'guestUser',
@@ -851,6 +1003,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setHasSavedCredentials(false);
       } catch (credError) {
         console.warn('⚠️ Failed to clear saved credentials:', credError);
+      }
+
+      // Clear saved session token
+      try {
+        await secureCredentialService.clearSessionToken();
+        safeSetHasLocalSession(false);
+        safeSetSessionVerified(false);
+      } catch (tokenError) {
+        console.warn('⚠️ Failed to clear session token:', tokenError);
       }
 
       // Clear AsyncStorage with enhanced error handling
@@ -1139,6 +1300,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     userProfile,
     loading,
     authReady, // ADDED: True when auth state is determined
+    hasLocalSession, // ADDED: True if local session exists
+    sessionVerified, // ADDED: True after Firebase verification
     isGuest,
     justRegistered, // ADDED: Registration completion flag
     signIn,
