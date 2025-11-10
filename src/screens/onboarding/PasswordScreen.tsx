@@ -96,6 +96,7 @@ const PasswordScreen: React.FC = () => {
         primaryButtonDisabled={loading || password.length < 8 || confirmPassword.length < 8}
         primaryButtonLoading={loading}
         currentStep={currentStep}
+        totalSteps={5}
       />
     </View>
   );

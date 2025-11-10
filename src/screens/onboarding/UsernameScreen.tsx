@@ -227,6 +227,7 @@ const UsernameScreen: React.FC = () => {
         primaryButtonDisabled={loading || checkingAvailability || !isAvailable}
         primaryButtonLoading={loading}
         currentStep={currentStep}
+        totalSteps={5}
         showStepDots={true}
       />
     </View>

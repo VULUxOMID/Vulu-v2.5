@@ -138,6 +138,7 @@ const ContactMethodScreen: React.FC = () => {
         primaryButtonDisabled={loading || (!email.trim() && !phoneNumber.trim())}
         primaryButtonLoading={loading}
         currentStep={currentStep}
+        totalSteps={5}
         showStepDots={true}
       />
     </View>

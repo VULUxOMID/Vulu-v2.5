@@ -25,11 +25,13 @@ export default function Auth() {
   }, [user?.email, user?.displayName, userProfile?.email, userProfile?.username, userProfile?.displayName, userProfile?.name, userProfile?.fullName, userProfile?.onboardingCompleted]);
 
   // Check onboarding completion status
+  // CRITICAL: Re-check when auth loading completes to catch returning users
   useEffect(() => {
     const checkOnboardingStatus = async () => {
       try {
         const completed = await AsyncStorage.getItem('@onboarding_completed');
         setOnboardingCompleted(completed === 'true');
+        console.log('📋 Onboarding status check:', completed === 'true' ? 'completed' : 'not completed');
       } catch (error) {
         // Handle AsyncStorage errors gracefully in development environment
         console.warn('AsyncStorage unavailable in development environment, defaulting to incomplete onboarding');
@@ -40,12 +42,23 @@ export default function Auth() {
       }
     };
 
+    // Check immediately on mount
     checkOnboardingStatus();
-  }, []);
+
+    // CRITICAL: Re-check when auth loading completes (for auto-login users)
+    if (!loading && user) {
+      console.log('🔄 Auth loaded, re-checking onboarding status for returning user');
+      checkOnboardingStatus();
+    }
+  }, [loading, user]);
 
   // Redirect authenticated users
   useEffect(() => {
-    if (loading || checkingOnboarding) return;
+    // CRITICAL: Wait for both auth and onboarding checks to complete
+    if (loading || checkingOnboarding) {
+      console.log('⏳ Waiting for checks to complete...', { loading, checkingOnboarding });
+      return;
+    }
 
     if (!user) return;
 
@@ -78,13 +91,14 @@ export default function Auth() {
     console.log('ℹ️ Onboarding not completed, showing onboarding screens');
   }, [user, userProfile, loading, checkingOnboarding, onboardingCompleted, isGuest, justRegistered, router, clearRegistrationFlag]);
 
-  // Early return: If user is authenticated and onboarding is complete, redirect immediately
-  // This prevents any UI flash
+  // CRITICAL: Early return to prevent UI flash for returning users
+  // If user is authenticated and onboarding is complete, don't render anything
   if (!loading && !checkingOnboarding && user) {
     const completed =
       Boolean(userProfile?.onboardingCompleted) || onboardingCompleted === true;
 
-    if ((isGuest || justRegistered || completed) && !loading) {
+    if (isGuest || justRegistered || completed) {
+      console.log('🚀 Returning user detected, preventing flash by returning null');
       // Don't render anything - the useEffect will handle the redirect
       return null;
     }

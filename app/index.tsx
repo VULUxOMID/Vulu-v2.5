@@ -16,15 +16,23 @@ function AuthenticationRouter() {
   const clearRegistrationFlag = authContext?.clearRegistrationFlag;
 
   useEffect(() => {
-    // Don't navigate if auth context is not available or still loading
-    if (!authContext || loading) {
-      console.log('🔄 Authentication still loading...');
+    // CRITICAL: Don't navigate if auth context is not available
+    if (!authContext) {
+      console.log('⏳ Auth context not available yet...');
       return;
     }
 
+    // CRITICAL: Don't navigate while loading is true - wait for auth to finish
+    if (loading === true) {
+      console.log('🔄 Authentication still loading, waiting...');
+      return;
+    }
+
+    // Only proceed when loading is explicitly false
     console.log('🔍 Authentication check:', {
       hasUser: !!user,
-      userType: user ? (user.isGuest ? 'guest' : 'authenticated') : 'none'
+      userType: user ? (user.isGuest ? 'guest' : 'authenticated') : 'none',
+      loading
     });
 
     if (user) {
@@ -42,7 +50,7 @@ function AuthenticationRouter() {
       console.log('🚫 No user found, showing authentication selection');
       router.replace('/auth');
     }
-  }, [user, loading, router, authContext]);
+  }, [user, loading, router, authContext, clearRegistrationFlag]);
 
   // If auth context is not available, show loading
   if (!authContext) {

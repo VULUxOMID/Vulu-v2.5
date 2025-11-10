@@ -164,6 +164,7 @@ const ProfileScreen: React.FC = () => {
         secondaryButtonText="Skip for now"
         onSecondaryPress={handleSkip}
         currentStep={currentStep}
+        totalSteps={5}
         showStepDots={true}
       />
     </View>

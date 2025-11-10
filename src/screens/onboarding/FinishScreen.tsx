@@ -126,6 +126,7 @@ const FinishScreen: React.FC = () => {
         primaryButtonDisabled={loading}
         primaryButtonLoading={loading}
         currentStep={currentStep}
+        totalSteps={5}
         showStepDots={true}
       />
     </View>
