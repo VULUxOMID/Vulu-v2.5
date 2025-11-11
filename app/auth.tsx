@@ -52,18 +52,6 @@ export default function Auth() {
     }
   }, [loading, user]);
 
-  // CRITICAL: If user is authenticated and doesn't need onboarding, show loading screen
-  // app/index.tsx will handle the navigation to /(main)
-  // This prevents the auth UI flash
-  if (!loading && !checkingOnboarding && user) {
-    const completed = Boolean(userProfile?.onboardingCompleted) || onboardingCompleted === true;
-
-    if (isGuest || justRegistered || completed) {
-      console.log('🚀 [auth.tsx] Authenticated user detected, showing loading screen (index.tsx will navigate)');
-      return <BrandedLoadingScreen message="Welcome back..." />;
-    }
-  }
-
   // Show loading screen while checking authentication or onboarding
   if (loading || checkingOnboarding) {
     console.log('⏳ [auth.tsx] Loading or checking onboarding...');
@@ -71,7 +59,7 @@ export default function Auth() {
   }
 
   // If user is authenticated but onboarding not complete, show onboarding screens
-  if (user && !onboardingCompleted && !userProfile?.onboardingCompleted) {
+  if (user && !onboardingCompleted && !userProfile?.onboardingCompleted && !isGuest && !justRegistered) {
     console.log('📝 [auth.tsx] User needs onboarding, showing onboarding flow');
     return (
       <OnboardingProvider>
