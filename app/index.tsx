@@ -25,12 +25,22 @@ function AuthenticationRouter() {
       return;
     }
 
+    // Log current state for debugging
+    console.log('📊 Routing state:', {
+      hasLocalSession,
+      hasUser: !!user,
+      sessionVerified,
+      authReady,
+      loading
+    });
+
     // DISCORD-STYLE INSTANT LAUNCH: If we have a local session, navigate immediately
     // Don't wait for authReady - show the app instantly while verification happens in background
     if (hasLocalSession && user) {
-      console.log('🚀 Local session found, navigating to main app instantly!', {
+      console.log('🚀 INSTANT LAUNCH: Local session found, navigating to main app NOW!', {
         sessionVerified,
-        hasUser: !!user
+        hasUser: !!user,
+        timestamp: Date.now()
       });
 
       // Clear registration flag when user reaches main app

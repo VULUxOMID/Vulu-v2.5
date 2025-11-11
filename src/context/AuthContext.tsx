@@ -343,35 +343,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   /**
-   * Restore session from saved token for instant app launch (Discord-style)
-   * Shows main app immediately while verifying token in background
+   * Restore session from Firebase persistence for instant app launch (Discord-style)
+   * CRITICAL: This must set hasLocalSession SYNCHRONOUSLY to prevent flash
    */
-  const restoreSessionFromToken = async (): Promise<void> => {
+  const restoreSessionFromToken = (): void => {
     try {
-      console.log('🚀 Attempting instant session restoration...');
+      console.log('🚀 Checking for persisted Firebase user...');
 
-      // Check if we have a saved session token
-      const session = await secureCredentialService.getSessionToken();
-
-      if (!session) {
-        console.log('ℹ️ No saved session token found');
-        safeSetHasLocalSession(false);
-        safeSetSessionVerified(false);
-        return;
-      }
-
-      console.log('💾 Found saved session, restoring user instantly...');
-
-      // Get the current Firebase user (should be restored by Firebase persistence)
+      // CRITICAL: Check Firebase's persisted user SYNCHRONOUSLY
+      // Firebase already restored the user from AsyncStorage by this point
       const currentUser = authService.getCurrentUser();
 
-      if (currentUser && currentUser.uid === session.userId) {
-        console.log('✅ Firebase user already restored from persistence');
+      if (currentUser) {
+        console.log('✅ Firebase user found in persistence, enabling instant launch!');
 
-        // Set user immediately for instant UI
+        // CRITICAL: Set hasLocalSession IMMEDIATELY (synchronously)
+        // This allows app/index.tsx to navigate instantly without waiting
+        safeSetHasLocalSession(true);
         safeSetUser(currentUser);
         safeSetIsGuest(false);
-        safeSetHasLocalSession(true);
 
         // Load user profile in background
         safeAsync(async () => {
@@ -383,9 +373,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }, null, 'restoreSession.loadProfile');
 
         // Mark onboarding as completed (returning user)
-        await markOnboardingCompleted();
+        safeAsync(async () => {
+          await markOnboardingCompleted();
+        }, undefined, 'restoreSession.markOnboarding');
 
-        // Verify token in background
+        // Verify token and save session in background
         safeAsync(async () => {
           try {
             // Try to get a fresh ID token to verify the session is still valid
@@ -394,6 +386,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
             console.log('✅ Session token verified successfully');
             safeSetSessionVerified(true);
+
+            // Save the session token for next launch
+            if (currentUser.refreshToken) {
+              await secureCredentialService.saveSessionToken(currentUser.uid, currentUser.refreshToken);
+              console.log('✅ Session token saved for next launch');
+            }
 
             // Start profile sync after verification
             profileSyncService.startProfileSync(currentUser.uid);
@@ -410,8 +408,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }, undefined, 'restoreSession.verifyToken');
 
       } else {
-        console.log('ℹ️ No Firebase user found or UID mismatch, clearing saved session');
-        await secureCredentialService.clearSessionToken();
+        console.log('ℹ️ No Firebase user found in persistence');
         safeSetHasLocalSession(false);
         safeSetSessionVerified(false);
       }
@@ -420,8 +417,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('❌ Session restoration failed:', error?.message || error);
       safeSetHasLocalSession(false);
       safeSetSessionVerified(false);
-      // Clear invalid session
-      await secureCredentialService.clearSessionToken();
     }
   };
 
