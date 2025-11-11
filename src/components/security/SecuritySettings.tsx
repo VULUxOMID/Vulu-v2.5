@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Switch } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type FeatherIconName = 'bell' | 'log-in' | 'alert-triangle' | 'lock' | 'fingerprint' | 'settings' | 'refresh-ccw' | 'info';
+type IoniconsName = 'notifications' | 'log-in' | 'warning' | 'lock-closed' | 'finger-print' | 'settings' | 'refresh' | 'information-circle';
 
 interface SecurityPreferences {
   enableSecurityNotifications: boolean;
@@ -117,19 +117,19 @@ export const SecuritySettings: React.FC<SecuritySettingsProps> = ({
     subtitle: string;
     value: boolean;
     onToggle: () => void;
-    icon: FeatherIconName;
+    icon: IoniconsName;
     iconColor?: string;
   }> = ({ title, subtitle, value, onToggle, icon, iconColor = '#6E69F4' }) => (
     <View style={styles.settingItem}>
       <View style={styles.settingIcon}>
-        <Feather name={icon} size={18} color={iconColor} />
+        <Ionicons name={icon} size={18} color={iconColor} />
       </View>
-      
+
       <View style={styles.settingContent}>
         <Text style={styles.settingTitle}>{title}</Text>
         <Text style={styles.settingSubtitle}>{subtitle}</Text>
       </View>
-      
+
       <Switch
         value={value}
         onValueChange={onToggle}
@@ -150,7 +150,7 @@ export const SecuritySettings: React.FC<SecuritySettingsProps> = ({
       >
         <View style={styles.header}>
           <View style={styles.titleContainer}>
-            <Feather name="settings" size={20} color="#6E69F4" />
+            <Ionicons name="settings" size={20} color="#6E69F4" />
             <Text style={styles.title}>Security Settings</Text>
           </View>
         </View>
@@ -161,7 +161,7 @@ export const SecuritySettings: React.FC<SecuritySettingsProps> = ({
             subtitle="Get notified about security events"
             value={preferences.enableSecurityNotifications}
             onToggle={() => togglePreference('enableSecurityNotifications')}
-            icon="bell"
+            icon="notifications"
           />
 
           <SecurityToggleItem
@@ -177,7 +177,7 @@ export const SecuritySettings: React.FC<SecuritySettingsProps> = ({
             subtitle="Alert for unusual account activity"
             value={preferences.enableSuspiciousActivityAlerts}
             onToggle={() => togglePreference('enableSuspiciousActivityAlerts')}
-            icon="alert-triangle"
+            icon="warning"
             iconColor="#FF9500"
           />
 
@@ -186,7 +186,7 @@ export const SecuritySettings: React.FC<SecuritySettingsProps> = ({
             subtitle="Automatically lock account after failed attempts"
             value={preferences.autoLockEnabled}
             onToggle={() => togglePreference('autoLockEnabled')}
-            icon="lock"
+            icon="lock-closed"
           />
 
           <SecurityToggleItem
@@ -194,24 +194,24 @@ export const SecuritySettings: React.FC<SecuritySettingsProps> = ({
             subtitle="Require biometric auth for account changes"
             value={preferences.requireBiometricForSensitiveActions}
             onToggle={() => togglePreference('requireBiometricForSensitiveActions')}
-            icon="fingerprint"
+            icon="finger-print"
           />
         </View>
 
         <View style={styles.actionsContainer}>
-          <TouchableOpacity 
-            style={styles.resetButton} 
+          <TouchableOpacity
+            style={styles.resetButton}
             onPress={resetToDefaults}
             disabled={loading}
           >
-            <Feather name="refresh-ccw" size={16} color="#FF9500" />
+            <Ionicons name="refresh" size={16} color="#FF9500" />
             <Text style={styles.resetButtonText}>Reset to Defaults</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.infoContainer}>
           <View style={styles.infoIcon}>
-            <Feather name="info" size={14} color="#9BA1A6" />
+            <Ionicons name="information-circle" size={14} color="#9BA1A6" />
           </View>
           <Text style={styles.infoText}>
             These settings help protect your account from unauthorized access and suspicious activity.
