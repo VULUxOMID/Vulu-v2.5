@@ -56,6 +56,11 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
+    // CRITICAL FIX: Add rule for userInventories (plural) - code uses this collection name
+    match /userInventories/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
     // SUBSCRIPTION COLLECTIONS
     match /userSubscriptions/{userId} {
       allow read, write: if isOwner(userId);

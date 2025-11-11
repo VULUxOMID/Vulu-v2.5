@@ -111,9 +111,6 @@ const HomeScreen = () => {
   const { profileImage, displayName } = useUserProfile();
   const { counts, updateAllNotificationsCount } = useNotifications();
 
-  // Debug: Log displayName to verify it's being passed correctly
-  console.log('🔍 HomeScreen displayName:', displayName);
-
   // Get music data from context
   const { friendsActivities: friendsMusicActivities, isLoadingActivity: isLoadingMusic } = useMusic();
 

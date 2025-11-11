@@ -547,12 +547,16 @@ class ShopService {
         lastUpdated: data.lastUpdated?.toDate() || new Date()
       } as UserInventory;
     } catch (error: any) {
-      // Handle permission errors gracefully for guest users
+      // Handle permission errors - this should only happen for guest users
+      // If this happens for authenticated users, it indicates a Firestore security rule issue
       if (FirebaseErrorHandler.isPermissionError(error)) {
-        console.warn('Permission denied for getUserInventory - returning empty inventory for guest user');
+        console.warn(`⚠️ Permission denied for getUserInventory (userId: ${userId})`);
+        console.warn('⚠️ This may indicate Firestore security rules are blocking access');
+        console.warn('⚠️ Returning empty inventory as fallback');
         return {
           userId,
-          items: [],
+          items: {},
+          activeBoosts: {},
           lastUpdated: new Date()
         };
       }
