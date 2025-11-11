@@ -18,6 +18,7 @@ import { profileSyncService } from '../services/profileSyncService';
 import { encryptionService } from '../services/encryptionService';
 import { PresenceService } from '../services/presenceService';
 import { secureCredentialService } from '../services/secureCredentialService';
+import { savedProfilesService } from '../services/savedProfilesService';
 
 interface AuthContextType {
   user: User | GuestUser | null;
@@ -612,7 +613,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Clear any existing guest session
       await authService.clearGuestUser();
-      await authService.signIn(email, password);
+      const firebaseUser = await authService.signIn(email, password);
 
       // Clear failed attempts on successful login
       await securityService.clearFailedAttempts(userIdentifier);
@@ -626,9 +627,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Start new session
       await sessionService.startSession();
 
+      // Save profile for quick sign-in (non-guest users only)
+      // Wait a bit for userProfile to be loaded by onAuthStateChanged
+      setTimeout(async () => {
+        try {
+          if (firebaseUser && !isGuest) {
+            // Get unread notification count
+            let unreadCount = 0;
+            try {
+              const notificationService = (await import('../services/notificationService')).default;
+              const counts = await notificationService.getNotificationCounts(firebaseUser.uid);
+              unreadCount = counts.unread || 0;
+            } catch (notifError) {
+              console.warn('⚠️ Failed to fetch notification count:', notifError);
+            }
+
+            await savedProfilesService.saveProfile(
+              {
+                userId: firebaseUser.uid,
+                email: firebaseUser.email || email,
+                displayName: firebaseUser.displayName || userProfile?.displayName || email.split('@')[0],
+                photoURL: firebaseUser.photoURL || userProfile?.photoURL,
+              },
+              password,
+              unreadCount
+            );
+            console.log('✅ Profile saved for quick sign-in');
+          }
+        } catch (saveError) {
+          console.warn('⚠️ Failed to save profile for quick sign-in:', saveError);
+          // Don't fail the sign-in if profile save fails
+        }
+      }, 1000);
+
       // Note: Firebase persistence automatically saves the session to AsyncStorage
       // The session will be restored on next app launch via onAuthStateChanged
-      // No need to manually save credentials - Firebase handles this for us
       console.log('✅ Sign-in successful - Firebase will persist this session');
     } catch (error: any) {
       // Log failed login attempt
@@ -764,6 +797,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('✅ Secure storage cleared');
         safeSetHasLocalSession(false);
         safeSetSessionVerified(false);
+
+        // NOTE: We do NOT clear saved profiles here - they persist for quick sign-in
+        // Users can manually remove profiles from the login screen if desired
       } catch (error) {
         console.warn('⚠️ Failed to clear secure storage:', error);
         // Continue with sign-out even if clearing fails

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 
@@ -69,13 +69,13 @@ export const BiometricAuthButton: React.FC<BiometricAuthButtonProps> = ({
     }
   };
 
-  const getBiometricIcon = () => {
+  const getBiometricIcon = (): any => {
     if (biometricType.toLowerCase().includes('face')) {
-      return 'user-check';
+      return 'scan';
     } else if (biometricType.toLowerCase().includes('touch') || biometricType.toLowerCase().includes('fingerprint')) {
-      return 'fingerprint';
+      return 'finger-print';
     } else {
-      return 'shield';
+      return 'shield-checkmark';
     }
   };
 
@@ -103,7 +103,7 @@ export const BiometricAuthButton: React.FC<BiometricAuthButtonProps> = ({
             </View>
           ) : (
             <View style={styles.buttonContent}>
-              <Feather name={getBiometricIcon() as any} size={20} color="#FFFFFF" />
+              <Ionicons name={getBiometricIcon()} size={20} color="#FFFFFF" />
               <Text style={styles.buttonText}>Sign in with {biometricType}</Text>
             </View>
           )}
@@ -189,7 +189,7 @@ export const BiometricSettings: React.FC<BiometricSettingsProps> = ({ onToggle }
     <TouchableOpacity style={styles.settingsContainer} onPress={handleToggle} disabled={loading}>
       <View style={styles.settingsContent}>
         <View style={styles.settingsIcon}>
-          <Feather name="shield" size={20} color="#6E69F4" />
+          <Ionicons name="shield-checkmark" size={20} color="#6E69F4" />
         </View>
         <View style={styles.settingsText}>
           <Text style={styles.settingsTitle}>{biometricType}</Text>

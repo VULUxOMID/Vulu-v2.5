@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthColors, AuthTypography } from '../../components/auth/AuthDesignSystem';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
+import QuickSignInTiles from '../../components/auth/QuickSignInTiles';
+import type { SavedProfile } from '../../services/savedProfilesService';
 
 const { width } = Dimensions.get('window');
 
@@ -26,11 +28,45 @@ const AuthSelectionScreen: React.FC<AuthSelectionScreenProps> = ({
 }) => {
   const router = useRouter();
   const { signIn } = useAuth();
+  const [isQuickSigningIn, setIsQuickSigningIn] = useState(false);
+
+  const handleQuickSignIn = async (profile: SavedProfile, password: string) => {
+    setIsQuickSigningIn(true);
+    try {
+      console.log('🚀 Quick sign-in started for:', profile.email);
+      await signIn(profile.email, password);
+      console.log('✅ Quick sign-in successful - navigating to main app');
+
+      // Navigate immediately to main app - don't wait for auth.tsx
+      // AuthContext will catch up in the background
+      router.replace('/(main)');
+    } catch (error: any) {
+      console.error('❌ Quick sign-in failed:', error.message);
+      setIsQuickSigningIn(false);
+      Alert.alert(
+        'Quick Sign-In Failed',
+        error.message || 'Unable to sign in with saved credentials. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+    // Don't set isQuickSigningIn to false on success - let the navigation happen
+  };
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        {/* Full-screen loading overlay during quick sign-in */}
+        {isQuickSigningIn && (
+          <View style={styles.loadingOverlay}>
+            <View style={styles.loadingContent}>
+              <ActivityIndicator size="large" color={AuthColors.primaryButton} />
+              <Text style={styles.loadingText}>Signing you in...</Text>
+            </View>
+          </View>
+        )}
+
         {/* Header with optional back button */}
-        {showBackButton && onBackPress && (
+        {showBackButton && onBackPress && !isQuickSigningIn && (
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
@@ -42,8 +78,8 @@ const AuthSelectionScreen: React.FC<AuthSelectionScreenProps> = ({
           </View>
         )}
 
-        {/* Main Content */}
-        <View style={styles.content}>
+        {/* Main Content - Hidden during quick sign-in */}
+        <View style={[styles.content, isQuickSigningIn && styles.contentHidden]}>
           {/* Logo and Branding */}
           <View style={styles.logoContainer}>
             <LinearGradient
@@ -64,6 +100,9 @@ const AuthSelectionScreen: React.FC<AuthSelectionScreenProps> = ({
               How would you like to continue with VULU?
             </Text>
           </View>
+
+          {/* Quick Sign-In Tiles */}
+          <QuickSignInTiles onProfileSelect={handleQuickSignIn} />
 
           {/* Action Buttons */}
           <View style={styles.actionsContainer}>
@@ -286,6 +325,30 @@ const styles = StyleSheet.create({
   footerLink: {
     color: AuthColors.linkColor,
     fontWeight: '500',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: AuthColors.background,
+    zIndex: 1000,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingContent: {
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: AuthColors.primaryText,
+    marginTop: 16,
+  },
+  contentHidden: {
+    opacity: 0,
   },
 });
 

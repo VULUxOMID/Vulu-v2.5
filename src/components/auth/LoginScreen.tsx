@@ -14,10 +14,11 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import FirebaseErrorHandler from '../../utils/firebaseErrorHandler';
 import { useAuthLoading, AuthLoadingMessages } from '../../hooks/useAuthLoading';
-import LoadingOverlay from './LoadingOverlay';
 import { validateEmail, loginRateLimiter } from '../../utils/inputSanitization';
 import SocialAuthButtons from './SocialAuthButtons';
 import BiometricAuthButton from './BiometricAuthButton';
+import QuickSignInTiles from './QuickSignInTiles';
+import { SavedProfile } from '../../services/savedProfilesService';
 
 import {
   AuthContainer,
@@ -164,7 +165,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToSignup, onSwitchToP
     onSwitchToPasswordReset();
   };
 
+  // Handle quick sign-in from saved profile
+  const handleQuickSignIn = async (profile: SavedProfile, password: string) => {
+    setLoading(AuthLoadingMessages.SIGNING_IN.message, AuthLoadingMessages.SIGNING_IN.submessage);
 
+    try {
+      await signIn(profile.email, password);
+      console.log('✅ Quick sign-in successful');
+      setSuccess(AuthLoadingMessages.SUCCESS_SIGNED_IN.message, AuthLoadingMessages.SUCCESS_SIGNED_IN.submessage);
+    } catch (error: any) {
+      console.error('❌ Quick sign-in failed:', error.message);
+      const errorInfo = FirebaseErrorHandler.formatAuthErrorForUI(error);
+      setError('Quick Sign-In Failed', errorInfo.message);
+    }
+  };
 
   return (
     <View style={styles.discordContainer}>
@@ -192,6 +206,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToSignup, onSwitchToP
               <View style={styles.discordTitle}>
                 <Text style={styles.discordTitleText}>Welcome back!</Text>
               </View>
+
+              {/* Quick Sign-In Tiles */}
+              <QuickSignInTiles onProfileSelect={handleQuickSignIn} />
 
               <View style={styles.discordForm}>
                   <View style={styles.discordInputGroup}>
@@ -282,12 +299,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToSignup, onSwitchToP
           </ScrollView>
         </KeyboardAvoidingView>
 
-        <LoadingOverlay
-          visible={loadingState.isLoading}
-          message={loadingState.message}
-          submessage={loadingState.submessage}
-          type={loadingState.type}
-        />
+        {/* Loading overlay removed for snappier UX - loading states shown inline */}
       </SafeAreaView>
     </View>
   );
