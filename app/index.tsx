@@ -2,11 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuthSafe } from '../src/context/AuthContext';
 import BrandedLoadingScreen from '../src/components/BrandedLoadingScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// CRITICAL FIX: Authentication-first routing component with smooth loading screen
+// CRITICAL: Single source of truth for all app routing
+// This component decides whether to show /(main) or /auth based on auth state
+// No other component should perform navigation - this prevents flashes and race conditions
 function AuthenticationRouter() {
   const router = useRouter();
   const [isNavigating, setIsNavigating] = useState(false);
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
 
   // Safely get auth context - returns null if provider not ready
   const authContext = useAuthSafe();
@@ -18,6 +22,23 @@ function AuthenticationRouter() {
   const hasLocalSession = authContext?.hasLocalSession;
   const sessionVerified = authContext?.sessionVerified;
   const clearRegistrationFlag = authContext?.clearRegistrationFlag;
+  const isGuest = authContext?.isGuest;
+  const justRegistered = authContext?.justRegistered;
+  const userProfile = authContext?.userProfile;
+
+  // Check onboarding status from AsyncStorage
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      try {
+        const completed = await AsyncStorage.getItem('@onboarding_completed');
+        setOnboardingCompleted(completed === 'true');
+      } catch (error) {
+        console.warn('Failed to check onboarding status:', error);
+        setOnboardingCompleted(false);
+      }
+    };
+    checkOnboarding();
+  }, [user]); // Re-check when user changes
 
   useEffect(() => {
     // CRITICAL: Don't navigate if auth context is not available
@@ -31,13 +52,22 @@ function AuthenticationRouter() {
       return;
     }
 
+    // Wait for onboarding check to complete
+    if (onboardingCompleted === null) {
+      console.log('⏳ Waiting for onboarding check...');
+      return;
+    }
+
     // Log current state for debugging
     console.log('📊 Routing state:', {
       hasLocalSession,
       hasUser: !!user,
       sessionVerified,
       authReady,
-      loading
+      loading,
+      isGuest,
+      justRegistered,
+      onboardingCompleted
     });
 
     // DISCORD-STYLE INSTANT LAUNCH: If we have a local session, navigate immediately
@@ -87,24 +117,38 @@ function AuthenticationRouter() {
       loading,
       authReady,
       hasLocalSession,
-      sessionVerified
+      sessionVerified,
+      isGuest,
+      justRegistered,
+      onboardingCompleted
     });
 
     if (user) {
-      // User is authenticated (either regular user or guest) - go to main app
-      console.log('✅ User authenticated, navigating to main app');
+      // CRITICAL: Check if user needs onboarding
+      // Guest users, newly registered users, and users who completed onboarding go to main app
+      // Others need to complete onboarding first
+      const needsOnboarding = !isGuest && !justRegistered && !onboardingCompleted && !userProfile?.onboardingCompleted;
 
-      setIsNavigating(true);
+      if (needsOnboarding) {
+        console.log('📝 User needs onboarding, navigating to /auth for onboarding flow');
+        setIsNavigating(true);
+        setTimeout(() => {
+          router.replace('/auth');
+        }, 100);
+      } else {
+        console.log('✅ User authenticated and ready, navigating to main app');
+        setIsNavigating(true);
 
-      // Clear registration flag when user reaches main app
-      if (clearRegistrationFlag) {
-        clearRegistrationFlag();
+        // Clear registration flag when user reaches main app
+        if (clearRegistrationFlag) {
+          clearRegistrationFlag();
+        }
+
+        // Small delay for smooth transition
+        setTimeout(() => {
+          router.replace('/(main)');
+        }, 100);
       }
-
-      // Small delay for smooth transition
-      setTimeout(() => {
-        router.replace('/(main)');
-      }, 100);
     } else {
       // No user - show authentication selection screen
       console.log('🚫 No user found, showing authentication selection');
@@ -113,7 +157,7 @@ function AuthenticationRouter() {
         router.replace('/auth');
       }, 100);
     }
-  }, [user, loading, authReady, hasLocalSession, sessionVerified, router, authContext, clearRegistrationFlag, isNavigating]);
+  }, [user, loading, authReady, hasLocalSession, sessionVerified, router, authContext, clearRegistrationFlag, isNavigating, isGuest, justRegistered, onboardingCompleted, userProfile]);
 
   // If auth context is not available, show branded loading screen
   if (!authContext) {

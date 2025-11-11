@@ -730,6 +730,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         userIdentifier,
       });
 
+      // CRITICAL: Mark onboarding as completed BEFORE Firebase sign-in
+      // This prevents race condition where onAuthStateChanged fires before flag is set
+      // Manual sign-in = returning user, so they've already completed onboarding
+      try {
+        await markOnboardingCompleted();
+        console.log('✅ Onboarding flag set BEFORE sign-in (prevents flash)');
+      } catch (onboardingError) {
+        console.warn('⚠️ Failed to set onboarding flag:', onboardingError);
+        // Don't fail the sign-in if onboarding flag fails
+      }
+
       // Clear any existing guest session
       await authService.clearGuestUser();
       await authService.signIn(email, password);
@@ -768,16 +779,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } catch (tokenError) {
         console.warn('⚠️ Failed to save session token:', tokenError);
         // Don't fail the sign-in if token saving fails
-      }
-
-      // CRITICAL FIX: Mark onboarding as completed for returning users
-      // This prevents the onboarding screen flash after sign-out → sign-in
-      try {
-        await markOnboardingCompleted();
-        console.log('✅ Onboarding flag set for returning user');
-      } catch (onboardingError) {
-        console.warn('⚠️ Failed to set onboarding flag:', onboardingError);
-        // Don't fail the sign-in if onboarding flag fails
       }
 
       // DIAGNOSTIC: Check auth persistence after sign-in
