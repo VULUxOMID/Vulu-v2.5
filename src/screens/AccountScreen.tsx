@@ -32,7 +32,7 @@ const { height } = Dimensions.get('window');
 const AccountScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, userProfile, updateUserProfile, isGuest, updateUserEmail, deleteAccount } = useAuth();
+  const { user, userProfile, updateUserProfile, isGuest, updateUserEmail, deleteAccount, signOut } = useAuth();
   const [activeField, setActiveField] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -211,7 +211,8 @@ const AccountScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await authService.signOut();
+              // Use context signOut to ensure full cleanup (credentials, session tokens, etc.)
+              await signOut();
               setToastMessage('You have been signed out');
               setShowToast(true);
               setTimeout(() => {

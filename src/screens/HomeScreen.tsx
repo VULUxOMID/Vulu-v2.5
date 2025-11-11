@@ -2335,7 +2335,7 @@ const HomeScreen = () => {
   // Virtual currency state moved up to be available earlier
 
   // Get auth and guest restrictions
-  const { user, isGuest } = useAuth();
+  const { user, isGuest, signOut } = useAuth();
   const { canSendMessages, handleGuestRestriction } = useGuestRestrictions();
 
   // Calculate actual children count for layout
@@ -2808,7 +2808,8 @@ const HomeScreen = () => {
               color: '#FFFFFF',
               onPress: async () => {
                 try {
-                  await authService.signOut();
+                  // Use context signOut to ensure full cleanup (credentials, session tokens, etc.)
+                  await signOut();
                   if (router && typeof router.replace === 'function') {
                     router.replace('/auth');
                   }

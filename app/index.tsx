@@ -1,11 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { View, ActivityIndicator, Text } from 'react-native';
 import { useAuthSafe } from '../src/context/AuthContext';
+import BrandedLoadingScreen from '../src/components/BrandedLoadingScreen';
 
-// CRITICAL FIX: Authentication-first routing component
+// CRITICAL FIX: Authentication-first routing component with smooth loading screen
 function AuthenticationRouter() {
   const router = useRouter();
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // Safely get auth context - returns null if provider not ready
   const authContext = useAuthSafe();
@@ -22,6 +23,11 @@ function AuthenticationRouter() {
     // CRITICAL: Don't navigate if auth context is not available
     if (!authContext) {
       console.log('⏳ Auth context not available yet...');
+      return;
+    }
+
+    // Don't navigate if already navigating
+    if (isNavigating) {
       return;
     }
 
@@ -43,19 +49,27 @@ function AuthenticationRouter() {
         timestamp: Date.now()
       });
 
+      setIsNavigating(true);
+
       // Clear registration flag when user reaches main app
       if (clearRegistrationFlag) {
         clearRegistrationFlag();
       }
 
-      router.replace('/(main)');
+      // Small delay for smooth transition (100ms - barely noticeable)
+      setTimeout(() => {
+        router.replace('/(main)');
+      }, 100);
       return;
     }
 
     // If session verification failed, redirect to auth
     if (hasLocalSession && sessionVerified === false && !user) {
       console.log('❌ Session verification failed, redirecting to auth');
-      router.replace('/auth');
+      setIsNavigating(true);
+      setTimeout(() => {
+        router.replace('/auth');
+      }, 100);
       return;
     }
 
@@ -80,41 +94,40 @@ function AuthenticationRouter() {
       // User is authenticated (either regular user or guest) - go to main app
       console.log('✅ User authenticated, navigating to main app');
 
+      setIsNavigating(true);
+
       // Clear registration flag when user reaches main app
       if (clearRegistrationFlag) {
         clearRegistrationFlag();
       }
 
-      router.replace('/(main)');
+      // Small delay for smooth transition
+      setTimeout(() => {
+        router.replace('/(main)');
+      }, 100);
     } else {
       // No user - show authentication selection screen
       console.log('🚫 No user found, showing authentication selection');
-      router.replace('/auth');
+      setIsNavigating(true);
+      setTimeout(() => {
+        router.replace('/auth');
+      }, 100);
     }
-  }, [user, loading, authReady, hasLocalSession, sessionVerified, router, authContext, clearRegistrationFlag]);
+  }, [user, loading, authReady, hasLocalSession, sessionVerified, router, authContext, clearRegistrationFlag, isNavigating]);
 
-  // If auth context is not available, show loading
+  // If auth context is not available, show branded loading screen
   if (!authContext) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#131318' }}>
-        <ActivityIndicator size="large" color="#6E69F4" />
-        <Text style={{ color: '#FFFFFF', marginTop: 16, fontSize: 16 }}>
-          Loading authentication system...
-        </Text>
-      </View>
-    );
+    return <BrandedLoadingScreen message="Initializing..." />;
   }
 
-  // Show loading screen while determining authentication state
-  // Note: This screen should rarely be seen with instant launch enabled
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#131318' }}>
-      <ActivityIndicator size="large" color="#6E69F4" />
-      <Text style={{ color: '#FFFFFF', marginTop: 16, fontSize: 16 }}>
-        {hasLocalSession ? 'Launching...' : (!authReady ? 'Checking authentication...' : 'Loading VuluGO...')}
-      </Text>
-    </View>
-  );
+  // Show beautiful branded loading screen while determining authentication state
+  // This replaces the login screen flash with a professional loading experience
+  // Optimized to show for minimal time (<500ms) while auth state is determined
+  const loadingMessage = hasLocalSession
+    ? 'Launching...'
+    : (!authReady ? 'Loading...' : 'Preparing your experience...');
+
+  return <BrandedLoadingScreen message={loadingMessage} />;
 }
 
 export default function Index() {

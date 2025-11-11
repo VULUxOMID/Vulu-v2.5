@@ -905,6 +905,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const signOut = async () => {
     try {
+      console.log('🚪 Starting full sign-out process...');
+
       // Stop profile synchronization
       if (user && !isGuest) {
         profileSyncService.stopProfileSync(user.uid);
@@ -924,8 +926,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Clear saved credentials for auto-login
       try {
+        console.log('🔐 Clearing saved credentials from secure storage...');
         await secureCredentialService.clearCredentials();
-        console.log('✅ Saved credentials cleared');
+        console.log('✅ Saved credentials cleared (auto-login disabled)');
         setHasSavedCredentials(false);
       } catch (credError) {
         console.warn('⚠️ Failed to clear saved credentials:', credError);
@@ -934,8 +937,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Clear saved session token to prevent instant login
       try {
+        console.log('🎫 Clearing session token from secure storage...');
         await secureCredentialService.clearSessionToken();
-        console.log('✅ Session token cleared');
+        console.log('✅ Session token cleared (instant login disabled)');
         safeSetHasLocalSession(false);
         safeSetSessionVerified(false);
       } catch (tokenError) {
@@ -944,6 +948,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       // CRITICAL FIX: Clear ALL cached authentication data with error handling
+      console.log('🧹 Clearing AsyncStorage authentication data...');
       await safeAsyncStorage.multiRemove([
         'guestUser',
         'userProfile',
@@ -968,7 +973,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Then clear the actual session
       await authService.signOut();
 
-      console.log('✅ User signed out successfully and cache cleared');
+      console.log('✅ SIGN-OUT COMPLETE: All credentials, session tokens, and cached data cleared');
+      console.log('🔒 User will need to sign in again on next app launch (auto-login disabled)');
     } catch (error) {
       console.error('❌ Sign out error:', error);
       throw error;
