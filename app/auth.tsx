@@ -1,32 +1,30 @@
-import React, { useEffect, useState, useMemo, lazy, Suspense } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../src/context/AuthContext';
 import { View, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NewAuthScreen from '../src/screens/auth/NewAuthScreen';
 import { OnboardingProvider } from '../src/context/OnboardingContext';
-import BrandedLoadingScreen from '../src/components/BrandedLoadingScreen';
 
 // Lazy load OnboardingNavigator to prevent AuthColors import issues during app startup
 const OnboardingNavigator = lazy(() => import('../src/navigation/OnboardingNavigator'));
 
 /**
- * CRITICAL: This component is a PURE UI component - it does NOT handle navigation
- * All navigation decisions are made by app/index.tsx (single source of truth)
- * This component only decides WHAT to render based on auth state
+ * Auth Screen Component
+ *
+ * Responsibilities:
+ * - Shows login/signup screen for unauthenticated users
+ * - Shows onboarding for authenticated users who haven't completed it
+ * - Navigates to /(main) when user signs in on THIS screen (app/index.tsx is unmounted at this point)
+ *
+ * Note: app/index.tsx handles navigation for Firebase session restoration on cold start
+ * This component handles navigation for manual sign-in that happens while on /auth
  */
 export default function Auth() {
-  const { user, loading, isGuest, justRegistered, userProfile } = useAuth();
+  const router = useRouter();
+  const { user, isGuest, justRegistered, userProfile } = useAuth();
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
-
-  // Memoize the profile completeness check to prevent unnecessary re-renders
-  const hasCompleteProfile = useMemo(() => {
-    return !!(
-      (user?.email || userProfile?.email) &&
-      userProfile?.username &&
-      (user?.displayName || userProfile?.displayName || userProfile?.name || userProfile?.fullName)
-    ) || !!userProfile?.onboardingCompleted;
-  }, [user?.email, user?.displayName, userProfile?.email, userProfile?.username, userProfile?.displayName, userProfile?.name, userProfile?.fullName, userProfile?.onboardingCompleted]);
 
   // Check onboarding completion status
   useEffect(() => {
@@ -34,7 +32,6 @@ export default function Auth() {
       try {
         const completed = await AsyncStorage.getItem('@onboarding_completed');
         setOnboardingCompleted(completed === 'true');
-        console.log('📋 [auth.tsx] Onboarding status:', completed === 'true' ? 'completed' : 'not completed');
       } catch (error) {
         console.warn('[auth.tsx] AsyncStorage error, defaulting to incomplete onboarding');
         setOnboardingCompleted(false);
@@ -44,23 +41,56 @@ export default function Auth() {
     };
 
     checkOnboardingStatus();
+  }, []);
 
-    // Re-check when auth loading completes
-    if (!loading && user) {
-      console.log('🔄 [auth.tsx] Auth loaded, re-checking onboarding status');
-      checkOnboardingStatus();
+  // Navigate to main app when user signs in on this screen
+  // This is necessary because app/index.tsx is unmounted when we're on /auth
+  useEffect(() => {
+    if (!user || checkingOnboarding) return;
+
+    // Skip onboarding if ANY of these conditions are true:
+    // 1. User is a guest
+    // 2. User just registered (will go through onboarding flow)
+    // 3. AsyncStorage flag says onboarding is complete
+    // 4. Firestore profile says onboarding is complete
+    // 5. Profile has username and displayName (legacy accounts without onboardingCompleted flag)
+    const hasCompletedOnboarding = onboardingCompleted || userProfile?.onboardingCompleted;
+    const hasCompleteProfile = userProfile?.username && userProfile?.displayName;
+    const shouldSkipOnboarding = isGuest || justRegistered || hasCompletedOnboarding || hasCompleteProfile;
+
+    if (shouldSkipOnboarding) {
+      console.log('✅ [auth.tsx] User signed in, navigating to main app', {
+        isGuest,
+        justRegistered,
+        onboardingCompleted,
+        firestoreOnboardingCompleted: userProfile?.onboardingCompleted,
+        hasCompleteProfile
+      });
+      router.replace('/(main)');
+    } else {
+      console.log('⏳ [auth.tsx] User needs onboarding', {
+        onboardingCompleted,
+        firestoreOnboardingCompleted: userProfile?.onboardingCompleted,
+        hasUsername: !!userProfile?.username,
+        hasDisplayName: !!userProfile?.displayName
+      });
     }
-  }, [loading, user]);
-
-  // Show loading screen while checking authentication or onboarding
-  if (loading || checkingOnboarding) {
-    console.log('⏳ [auth.tsx] Loading or checking onboarding...');
-    return <BrandedLoadingScreen message="Loading..." />;
-  }
+  }, [user, checkingOnboarding, onboardingCompleted, userProfile?.onboardingCompleted, userProfile?.username, userProfile?.displayName, isGuest, justRegistered, router]);
 
   // If user is authenticated but onboarding not complete, show onboarding screens
-  if (user && !onboardingCompleted && !userProfile?.onboardingCompleted && !isGuest && !justRegistered) {
-    console.log('📝 [auth.tsx] User needs onboarding, showing onboarding flow');
+  // Only show onboarding if ALL of these are true:
+  // 1. User is authenticated
+  // 2. Not checking onboarding status
+  // 3. AsyncStorage flag is NOT set
+  // 4. Firestore profile does NOT have onboardingCompleted flag
+  // 5. Profile does NOT have username and displayName (incomplete profile)
+  // 6. Not a guest user
+  // 7. Not just registered
+  const hasCompletedOnboarding = onboardingCompleted || userProfile?.onboardingCompleted;
+  const hasCompleteProfile = userProfile?.username && userProfile?.displayName;
+  const shouldShowOnboarding = user && !checkingOnboarding && !hasCompletedOnboarding && !hasCompleteProfile && !isGuest && !justRegistered;
+
+  if (shouldShowOnboarding) {
     return (
       <OnboardingProvider>
         <Suspense fallback={
@@ -74,7 +104,6 @@ export default function Auth() {
     );
   }
 
-  // Show new authentication screen for non-authenticated users
-  console.log('🔐 [auth.tsx] No user, showing auth screen');
+  // Show authentication screen for non-authenticated users
   return <NewAuthScreen />;
 }

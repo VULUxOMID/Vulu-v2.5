@@ -2079,7 +2079,7 @@ const HomeScreen = () => {
         setEventTimeLeft(timeLeft);
 
         // Check if user won this cycle
-        if (event.winnerId === userProfile?.uid && event.status === 'ended') {
+        if (event.winnerId === userProfile?.uid && event?.status === 'ended') {
           setHasWonEvent(true);
           setWonEventCycle(event.cycleNumber);
         }

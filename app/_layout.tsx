@@ -112,7 +112,6 @@ import { MenuPositionProvider } from '../src/components/SidebarMenu';
 import { UserStatusProvider } from '../src/context/UserStatusContext';
 import ErrorBoundary from '../src/components/ErrorBoundary';
 import { setupGlobalErrorHandling } from '../src/utils/crashPrevention';
-import AuthDebugChip from '../src/components/debug/AuthDebugChip';
 
 // Import test utilities for debugging (temporarily disabled)
 // import '../src/utils/testSubscription';
@@ -166,8 +165,6 @@ export default function RootLayout() {
                                   contentStyle: { backgroundColor: '#131318' },
                                 }}
                               />
-                              {/* Temporary: On-screen auth debug chip */}
-                              <AuthDebugChip />
                             </MiniPlayerProvider>
                           </LiveStreamProvider>
                         </ShopProvider>

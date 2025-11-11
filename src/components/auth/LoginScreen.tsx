@@ -45,14 +45,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToSignup, onSwitchToP
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // CRITICAL FIX: Add debugging for input changes
   const handleEmailChange = (text: string) => {
-    console.log('📧 Email input changed:', text);
     setEmail(text);
   };
 
   const handlePasswordChange = (text: string) => {
-    console.log('🔒 Password input changed:', text.length, 'characters');
     setPassword(text);
   };
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -93,15 +90,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToSignup, onSwitchToP
       return;
     }
 
-    // DIAGNOSTIC: Enhanced logging for authentication debugging
-    console.log('🔐 Login attempt started:', {
-      email: email.trim(),
-      emailLength: email.trim().length,
-      passwordLength: password.length,
-      emailDomain: email.trim().split('@')[1],
-      timestamp: new Date().toISOString()
-    });
-
     setLoading(AuthLoadingMessages.SIGNING_IN.message, AuthLoadingMessages.SIGNING_IN.submessage);
 
     try {
@@ -111,23 +99,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToSignup, onSwitchToP
       // Show success state briefly
       setSuccess(AuthLoadingMessages.SUCCESS_SIGNED_IN.message, AuthLoadingMessages.SUCCESS_SIGNED_IN.submessage);
 
-      // Navigate directly to main app after successful sign-in
-      // This ensures immediate navigation without waiting for index.tsx routing logic
-      setTimeout(() => {
-        router.replace('/(main)');
-      }, 500);
+      // Navigation is handled by app/auth.tsx when user becomes truthy
+      // No need to manually navigate here
 
     } catch (error: any) {
-      // DIAGNOSTIC: Enhanced error logging for debugging
-      console.error('❌ Login failed:', {
-        errorCode: error.code,
-        errorMessage: error.message,
-        email: email.trim(),
-        emailDomain: email.trim().split('@')[1],
-        passwordProvided: !!password,
-        passwordLength: password.length,
-        timestamp: new Date().toISOString()
-      });
+      console.error('❌ Login failed:', error.message);
 
       // Use enhanced Firebase error handling
       const errorInfo = FirebaseErrorHandler.formatAuthErrorForUI(error);

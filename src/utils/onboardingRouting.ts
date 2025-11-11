@@ -27,9 +27,9 @@ export const checkDevicePermissions = async (): Promise<PermissionStatus> => {
     ]);
 
     return {
-      notifications: notificationStatus.status === 'granted',
-      contacts: contactsStatus.status === 'granted',
-      camera: cameraStatus.status === 'granted',
+      notifications: notificationStatus?.status === 'granted',
+      contacts: contactsStatus?.status === 'granted',
+      camera: cameraStatus?.status === 'granted',
     };
   } catch (error) {
     console.error('Error checking permissions:', error);

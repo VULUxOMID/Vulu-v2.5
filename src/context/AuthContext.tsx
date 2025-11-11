@@ -54,13 +54,6 @@ interface AuthContextType {
   signInWithBiometrics: () => Promise<boolean>;
   isBiometricAuthAvailable: () => Promise<boolean>;
   getBiometricTypeDescription: () => Promise<string>;
-  // Temporary debug data for on-screen chip
-  autoLoginDebug: {
-    attempted: boolean;
-    status: 'idle' | 'attempting' | 'success' | 'failed' | 'no-credentials';
-    hasSavedCredentials: boolean | null;
-    lastError?: string | null;
-  };
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -263,16 +256,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Safe timer instance for memory leak prevention
   const safeTimer = useRef(new SafeTimer());
   const mounted = useRef(true);
-
-  // Auto-login tracking to prevent multiple attempts
-  const autoLoginAttempted = useRef(false);
   const authStateReceived = useRef(false); // Track if onAuthStateChange has fired
-
-  // Temporary UI debug state for auto-login
-  const [autoLoginStatus, setAutoLoginStatus] = useState<'idle' | 'attempting' | 'success' | 'failed' | 'no-credentials'>('idle');
-  const [autoLoginAttemptedFlag, setAutoLoginAttemptedFlag] = useState(false);
-  const [hasSavedCredentials, setHasSavedCredentials] = useState<boolean | null>(null);
-  const [autoLoginError, setAutoLoginError] = useState<string | null>(null);
 
   /**
    * Helper to mark onboarding as completed in AsyncStorage
@@ -288,135 +272,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   /**
-   * Attempt automatic sign-in using saved credentials
-   * Only runs once per app launch
+   * Check if Firebase has restored a session from persistence
+   * Firebase automatically restores sessions via AsyncStorage persistence
+   * We just need to wait for the auth state listener to fire
    */
-  const tryAutoLogin = async () => {
-    if (autoLoginAttempted.current) {
-      console.log('ℹ️ Auto-login already attempted this session');
-      return;
-    }
+  const checkFirebaseSession = async (): Promise<void> => {
+    console.log('🔄 Checking for Firebase persisted session...');
 
-    autoLoginAttempted.current = true;
-    setAutoLoginAttemptedFlag(true);
-    setAutoLoginError(null);
+    // Firebase's onAuthStateChanged will fire automatically if there's a persisted session
+    // We just need to wait a moment for it to restore
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-    try {
-      // Don't auto-login if user is already signed in
-      const currentUser = authService.getCurrentUser();
-      if (currentUser) {
-        console.log('ℹ️ User already signed in, skipping auto-login');
-        setAutoLoginStatus('idle');
-        return;
-      }
-
-      // Check if credentials exist first
-      const hasCreds = await secureCredentialService.hasCredentials();
-      setHasSavedCredentials(hasCreds);
-
-      console.log('🔐 Attempting auto-login with saved credentials...');
-      setAutoLoginStatus('attempting');
-
-      const creds = await secureCredentialService.getCredentials();
-
-      if (creds?.email && creds?.password) {
-        console.log('🔑 Found saved credentials, signing in automatically...');
-        await authService.signIn(creds.email, creds.password);
-
-        // Mark onboarding as completed (auto-login = returning user)
-        await markOnboardingCompleted();
-
-        console.log('✅ Auto-login successful');
-        setAutoLoginStatus('success');
-      } else {
-        console.log('ℹ️ No saved credentials found for auto-login');
-        setAutoLoginStatus('no-credentials');
-      }
-    } catch (error: any) {
-      const msg = error?.message || String(error);
-      console.warn('⚠️ Auto-login failed:', msg);
-      setAutoLoginStatus('failed');
-      setAutoLoginError(msg);
-      // Don't throw - auto-login failure should be silent
-      // User can still sign in manually
-    }
-  };
-
-  /**
-   * Restore session from Firebase persistence for instant app launch (Discord-style)
-   * CRITICAL: This must set hasLocalSession SYNCHRONOUSLY to prevent flash
-   */
-  const restoreSessionFromToken = (): void => {
-    try {
-      console.log('🚀 Checking for persisted Firebase user...');
-
-      // CRITICAL: Check Firebase's persisted user SYNCHRONOUSLY
-      // Firebase already restored the user from AsyncStorage by this point
-      const currentUser = authService.getCurrentUser();
-
-      if (currentUser) {
-        console.log('✅ Firebase user found in persistence, enabling instant launch!');
-
-        // CRITICAL: Set hasLocalSession IMMEDIATELY (synchronously)
-        // This allows app/index.tsx to navigate instantly without waiting
-        safeSetHasLocalSession(true);
-        safeSetUser(currentUser);
-        safeSetIsGuest(false);
-
-        // Load user profile in background
-        safeAsync(async () => {
-          const profile = await firestoreService.getUser(currentUser.uid);
-          if (profile && mounted.current) {
-            safeSetUserProfile(profile);
-            console.log('✅ User profile loaded for instant session');
-          }
-        }, null, 'restoreSession.loadProfile');
-
-        // Mark onboarding as completed (returning user)
-        safeAsync(async () => {
-          await markOnboardingCompleted();
-        }, undefined, 'restoreSession.markOnboarding');
-
-        // Verify token and save session in background
-        safeAsync(async () => {
-          try {
-            // Try to get a fresh ID token to verify the session is still valid
-            const { getIdToken } = await import('firebase/auth');
-            await getIdToken(currentUser, true); // Force refresh
-
-            console.log('✅ Session token verified successfully');
-            safeSetSessionVerified(true);
-
-            // Save the session token for next launch
-            if (currentUser.refreshToken) {
-              await secureCredentialService.saveSessionToken(currentUser.uid, currentUser.refreshToken);
-              console.log('✅ Session token saved for next launch');
-            }
-
-            // Start profile sync after verification
-            profileSyncService.startProfileSync(currentUser.uid);
-
-            // Initialize encryption
-            await encryptionService.initialize(currentUser.uid);
-          } catch (verifyError: any) {
-            console.warn('⚠️ Session token verification failed:', verifyError?.message || verifyError);
-
-            // Token is invalid - sign out and clear
-            safeSetSessionVerified(false);
-            await signOut();
-          }
-        }, undefined, 'restoreSession.verifyToken');
-
-      } else {
-        console.log('ℹ️ No Firebase user found in persistence');
-        safeSetHasLocalSession(false);
-        safeSetSessionVerified(false);
-      }
-
-    } catch (error: any) {
-      console.error('❌ Session restoration failed:', error?.message || error);
+    const currentUser = authService.getCurrentUser();
+    if (currentUser) {
+      console.log('✅ Firebase session restored from persistence:', currentUser.email);
+      safeSetHasLocalSession(true);
+    } else {
+      console.log('ℹ️ No persisted Firebase session found - user needs to sign in');
       safeSetHasLocalSession(false);
-      safeSetSessionVerified(false);
     }
   };
 
@@ -509,29 +382,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     mounted.current = true;
 
-    // DIAGNOSTIC: Check auth persistence on app startup
-    safeAsync(async () => {
-      const { checkAuthPersistence } = await import('../services/firebase');
-      const status = await checkAuthPersistence();
-      console.log('🔍 Auth persistence on startup:', status);
-
-      if (!status.asyncStorageWorks) {
-        console.error('⚠️ CRITICAL: AsyncStorage not working on startup! Auth will not persist!');
-      }
-      if (status.currentUser) {
-        console.log('✅ User auth restored from persistence:', status.currentUser.email);
-      } else {
-        console.log('ℹ️ No persisted user found on startup (user not signed in)');
-      }
-    }, undefined, 'checkAuthPersistence.onStartup');
-
-    // Initialize session service with safe async wrapper
+    // Initialize session service
     const initializeSession = async () => {
       await safeAsync(async () => {
         await sessionService.initialize(() => {
           // Session expired callback
           if (mounted.current) {
-            console.log('Session expired, signing out user');
             signOut();
           }
         });
@@ -540,21 +396,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     initializeSession();
 
-    // CRITICAL: Try instant session restoration FIRST (Discord-style)
-    // This shows the main app immediately if a valid session exists
-    restoreSessionFromToken();
+    // Check for Firebase persisted session
+    // Firebase automatically restores sessions, we just wait for it
+    safeAsync(async () => {
+      await checkFirebaseSession();
+      // Set authReady after session check completes
+      safeSetAuthReady(true);
+    }, undefined, 'checkFirebaseSession.onStartup');
 
-    // Attempt auto-login with saved credentials (fallback if no session token)
-    tryAutoLogin();
-
-    // Set a maximum loading time to prevent infinite loading states using SafeTimer
-    // Increased timeout to allow more time for auth state restoration
+    // Set a maximum loading time to prevent infinite loading states
     const loadingTimeout = safeTimer.current.setTimeout(() => {
       if (mounted.current && loading) {
-        console.warn('Authentication loading timeout, setting loading to false');
+        console.warn('⚠️ Authentication loading timeout, setting loading to false');
         safeSetLoading(false);
       }
-    }, 30000); // 30 second timeout (increased for better auth restoration)
+    }, 10000); // 10 second timeout
 
     const unsubscribe = authService.onAuthStateChange(async (firebaseUser) => {
       if (!mounted.current) return;
@@ -585,9 +441,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               console.log(`✅ Loaded existing profile for user ${firebaseUser.uid}:`, {
                 displayName: profile.displayName,
                 username: profile.username,
-                email: profile.email
+                email: profile.email,
+                onboardingCompleted: profile.onboardingCompleted
               });
               safeSetUserProfile(profile);
+
+              // CRITICAL: If profile has username and displayName, it's a complete profile
+              // Mark onboarding as completed to prevent legacy accounts from getting stuck
+              if (profile.onboardingCompleted !== false) {
+                // If onboardingCompleted is true OR undefined (legacy accounts), mark as complete
+                await safeAsync(async () => {
+                  await markOnboardingCompleted();
+                  console.log('✅ Onboarding flag set for existing profile (prevents onboarding loop)');
+                }, undefined, 'markOnboardingCompleted.onProfileLoad');
+              }
+
               // Start profile synchronization for this user
               await safeAsync(async () => {
                 profileSyncService.startProfileSync(firebaseUser.uid);
@@ -615,9 +483,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 console.log(`✅ Profile sync completed for user ${firebaseUser.uid}:`, {
                   displayName: updatedProfile.displayName,
                   username: updatedProfile.username,
-                  email: updatedProfile.email
+                  email: updatedProfile.email,
+                  onboardingCompleted: updatedProfile.onboardingCompleted
                 });
                 safeSetUserProfile(updatedProfile);
+
+                // CRITICAL: If profile has username and displayName, it's a complete profile
+                // Mark onboarding as completed to prevent legacy accounts from getting stuck
+                if (updatedProfile.onboardingCompleted !== false) {
+                  // If onboardingCompleted is true OR undefined (legacy accounts), mark as complete
+                  await safeAsync(async () => {
+                    await markOnboardingCompleted();
+                    console.log('✅ Onboarding flag set for synced profile (prevents onboarding loop)');
+                  }, undefined, 'markOnboardingCompleted.onProfileSync');
+                }
 
                 // Start profile synchronization for this user
                 await safeAsync(async () => {
@@ -678,28 +557,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         }
       } else {
-        // CRITICAL FIX: Disable automatic sign-in - always require explicit user choice
-        console.log('🚫 No Firebase user found - requiring explicit authentication choice');
+        // No Firebase user found - user needs to sign in
+        console.log('🚫 No Firebase user found - authentication required');
 
         if (mounted.current) {
-          // Always set to signed out state - no automatic guest sign-in
           safeSetUser(null);
           safeSetUserProfile(null);
           safeSetIsGuest(false);
-          console.log('✅ User state cleared - authentication selection required');
-
-          // Try auto-login with saved credentials if available
-          await tryAutoLogin();
         }
       }
 
       if (mounted.current) {
         safeSetLoading(false);
-
-        // CRITICAL: Set authReady to true after auth state is determined
-        // This happens after onAuthStateChange has fired and we've processed the user state
-        // For users with firebaseUser: profile has been loaded
-        // For users without firebaseUser: tryAutoLogin has been attempted
         safeSetAuthReady(true);
       }
     });
@@ -757,46 +626,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Start new session
       await sessionService.startSession();
 
-      // Save credentials securely for auto-login
-      try {
-        await secureCredentialService.saveCredentials(userIdentifier, password);
-        console.log('✅ Credentials saved for auto-login');
-        setHasSavedCredentials(true);
-      } catch (credError) {
-        console.warn('⚠️ Failed to save credentials for auto-login:', credError);
-        // Don't fail the sign-in if credential saving fails
-      }
-
-      // Save session token for instant app launch (Discord-style)
-      try {
-        const currentUser = authService.getCurrentUser();
-        if (currentUser && currentUser.refreshToken) {
-          await secureCredentialService.saveSessionToken(currentUser.uid, currentUser.refreshToken);
-          console.log('✅ Session token saved for instant launch');
-          safeSetHasLocalSession(true);
-          safeSetSessionVerified(true);
-        }
-      } catch (tokenError) {
-        console.warn('⚠️ Failed to save session token:', tokenError);
-        // Don't fail the sign-in if token saving fails
-      }
-
-      // DIAGNOSTIC: Check auth persistence after sign-in
-      try {
-        const { checkAuthPersistence } = await import('../services/firebase');
-        const persistenceStatus = await checkAuthPersistence();
-        console.log('🔍 Auth persistence status after sign-in:', persistenceStatus);
-
-        if (!persistenceStatus.asyncStorageWorks) {
-          console.error('⚠️ WARNING: AsyncStorage not working! User will be signed out on app restart!');
-        }
-
-        if (persistenceStatus.currentUser && !persistenceStatus.currentUser.persistedDataFound) {
-          console.warn('⚠️ WARNING: User signed in but no persisted auth data found in AsyncStorage!');
-        }
-      } catch (diagError) {
-        console.warn('Could not run persistence diagnostic:', diagError);
-      }
+      // Note: Firebase persistence automatically saves the session to AsyncStorage
+      // The session will be restored on next app launch via onAuthStateChanged
+      // No need to manually save credentials - Firebase handles this for us
+      console.log('✅ Sign-in successful - Firebase will persist this session');
     } catch (error: any) {
       // Log failed login attempt
       await securityService.logSecurityEvent({
@@ -834,19 +667,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Start new session
       await sessionService.startSession();
 
-      // Save session token for instant app launch (Discord-style)
-      try {
-        const currentUser = authService.getCurrentUser();
-        if (currentUser && currentUser.refreshToken) {
-          await secureCredentialService.saveSessionToken(currentUser.uid, currentUser.refreshToken);
-          console.log('✅ Session token saved for instant launch after signup');
-          safeSetHasLocalSession(true);
-          safeSetSessionVerified(true);
-        }
-      } catch (tokenError) {
-        console.warn('⚠️ Failed to save session token after signup:', tokenError);
-        // Don't fail the sign-up if token saving fails
-      }
+      // Note: Firebase persistence automatically saves the session
+      // No need to manually save tokens - session will be restored on next app launch
     } catch (error: any) {
       // Enhanced error handling with proper Firebase error codes
       console.error('❌ SignUp error in AuthContext:', error);
@@ -935,27 +757,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       safeSetUserProfile(null);
       safeSetIsGuest(false);
 
-      // Clear saved credentials for auto-login
+      // Clear any saved credentials and session tokens from secure storage
       try {
-        console.log('🔐 Clearing saved credentials from secure storage...');
         await secureCredentialService.clearCredentials();
-        console.log('✅ Saved credentials cleared (auto-login disabled)');
-        setHasSavedCredentials(false);
-      } catch (credError) {
-        console.warn('⚠️ Failed to clear saved credentials:', credError);
-        // Continue with sign-out even if credential clearing fails
-      }
-
-      // Clear saved session token to prevent instant login
-      try {
-        console.log('🎫 Clearing session token from secure storage...');
         await secureCredentialService.clearSessionToken();
-        console.log('✅ Session token cleared (instant login disabled)');
+        console.log('✅ Secure storage cleared');
         safeSetHasLocalSession(false);
         safeSetSessionVerified(false);
-      } catch (tokenError) {
-        console.warn('⚠️ Failed to clear session token:', tokenError);
-        // Continue with sign-out even if token clearing fails
+      } catch (error) {
+        console.warn('⚠️ Failed to clear secure storage:', error);
+        // Continue with sign-out even if clearing fails
       }
 
       // CRITICAL FIX: Clear ALL cached authentication data with error handling
@@ -1339,15 +1150,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     getBiometricTypeDescription,
     completeOnboarding,
     isOnboardingComplete,
-    markRegistrationComplete, // ADDED: Mark registration complete
-    clearRegistrationFlag, // ADDED: Clear registration flag
-    // Temporary debug data for on-screen chip
-    autoLoginDebug: {
-      attempted: autoLoginAttemptedFlag,
-      status: autoLoginStatus,
-      hasSavedCredentials,
-      lastError: autoLoginError,
-    },
+    markRegistrationComplete,
+    clearRegistrationFlag,
   };
 
   return (
