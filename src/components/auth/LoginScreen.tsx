@@ -111,10 +111,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToSignup, onSwitchToP
       // Show success state briefly
       setSuccess(AuthLoadingMessages.SUCCESS_SIGNED_IN.message, AuthLoadingMessages.SUCCESS_SIGNED_IN.submessage);
 
-      // Navigate after success animation
-      setTimeout(() => {
-        router.replace('/(main)');
-      }, 1500);
+      // CRITICAL FIX: Don't navigate here - let app/index.tsx handle navigation
+      // This prevents navigation conflicts and flashes
+      // The auth state change will trigger automatic navigation via index.tsx
 
     } catch (error: any) {
       // DIAGNOSTIC: Enhanced error logging for debugging

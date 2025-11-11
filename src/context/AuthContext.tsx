@@ -770,6 +770,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Don't fail the sign-in if token saving fails
       }
 
+      // CRITICAL FIX: Mark onboarding as completed for returning users
+      // This prevents the onboarding screen flash after sign-out → sign-in
+      try {
+        await markOnboardingCompleted();
+        console.log('✅ Onboarding flag set for returning user');
+      } catch (onboardingError) {
+        console.warn('⚠️ Failed to set onboarding flag:', onboardingError);
+        // Don't fail the sign-in if onboarding flag fails
+      }
+
       // DIAGNOSTIC: Check auth persistence after sign-in
       try {
         const { checkAuthPersistence } = await import('../services/firebase');

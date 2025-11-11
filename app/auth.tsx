@@ -5,6 +5,7 @@ import { View, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NewAuthScreen from '../src/screens/auth/NewAuthScreen';
 import { OnboardingProvider } from '../src/context/OnboardingContext';
+import BrandedLoadingScreen from '../src/components/BrandedLoadingScreen';
 
 // Lazy load OnboardingNavigator to prevent AuthColors import issues during app startup
 const OnboardingNavigator = lazy(() => import('../src/navigation/OnboardingNavigator'));
@@ -92,25 +93,21 @@ export default function Auth() {
   }, [user, userProfile, loading, checkingOnboarding, onboardingCompleted, isGuest, justRegistered, router, clearRegistrationFlag]);
 
   // CRITICAL: Early return to prevent UI flash for returning users
-  // If user is authenticated and onboarding is complete, don't render anything
+  // If user is authenticated and onboarding is complete, show branded loading screen
   if (!loading && !checkingOnboarding && user) {
     const completed =
       Boolean(userProfile?.onboardingCompleted) || onboardingCompleted === true;
 
     if (isGuest || justRegistered || completed) {
-      console.log('🚀 Returning user detected, preventing flash by returning null');
-      // Don't render anything - the useEffect will handle the redirect
-      return null;
+      console.log('🚀 Returning user detected, showing branded loading screen during redirect');
+      // Show branded loading screen instead of null to prevent any flash
+      return <BrandedLoadingScreen message="Welcome back..." />;
     }
   }
 
   // Show loading screen while checking authentication or onboarding
   if (loading || checkingOnboarding) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f1117' }}>
-        <ActivityIndicator size="large" color="#5865F2" />
-      </View>
-    );
+    return <BrandedLoadingScreen message="Loading..." />;
   }
 
   // If user is authenticated but onboarding not complete, show onboarding screens
