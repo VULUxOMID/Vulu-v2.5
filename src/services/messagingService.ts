@@ -1410,6 +1410,41 @@ export class MessagingService {
     }
   }
 
+  /**
+   * Listen to friend requests in real-time
+   */
+  onFriendRequests(userId: string, callback: (requests: FriendRequest[]) => void): () => void {
+    try {
+      const requestsRef = collection(db, 'friendRequests');
+      const q = query(
+        requestsRef,
+        where('recipientId', '==', userId),
+        where('status', '==', 'pending'),
+        orderBy('createdAt', 'desc')
+      );
+
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const requests = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as FriendRequest[];
+
+        callback(requests);
+        console.log(`📡 Friend requests listener update: ${requests.length} pending requests`);
+      }, (error) => {
+        console.error('Error in friend requests listener:', error);
+        callback([]);
+      });
+
+      console.log(`📡 Started friend requests listener for user ${userId}`);
+      return unsubscribe;
+    } catch (error: any) {
+      console.error('Error setting up friend requests listener:', error);
+      callback([]);
+      return () => {}; // Return empty unsubscribe function
+    }
+  }
+
   // ==================== MESSAGE REACTIONS ====================
 
   /**

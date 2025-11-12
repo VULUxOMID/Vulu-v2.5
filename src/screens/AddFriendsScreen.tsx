@@ -10,8 +10,9 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import CommonHeader from '../components/CommonHeader';
@@ -22,6 +23,7 @@ import { firestoreService } from '../services/firestoreService';
 import { notificationService } from '../services/notificationService';
 import { messagingService } from '../services/messagingService';
 import { LoadingState, ErrorState, EmptyState } from '../components/ErrorHandling';
+import { FriendRequest as FriendRequestType } from '../services/types';
 
 interface User {
   id: string;
@@ -35,12 +37,13 @@ interface User {
 
 interface FriendRequest {
   id: string;
-  fromUserId: string;
-  toUserId: string;
-  fromUserName: string;
-  fromUserAvatar?: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar?: string;
+  recipientId: string;
+  recipientName: string;
   status: 'pending' | 'accepted' | 'declined';
-  timestamp: Date;
+  createdAt: Date;
   mutualFriends?: number;
 }
 
@@ -52,10 +55,12 @@ const AddFriendsScreen = () => {
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingRequests, setIsLoadingRequests] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'search' | 'requests'>('search');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lastSearchQuery, setLastSearchQuery] = useState('');
+  const friendRequestsListenerRef = useRef<(() => void) | null>(null);
 
   // Smart navigation back function
   const handleGoBack = useCallback(() => {
@@ -78,27 +83,97 @@ const AddFriendsScreen = () => {
     }
   }, [params.source]);
 
-  // Load friend requests on component mount
+  // Load friend requests on component mount and set up real-time listener
   useEffect(() => {
     if (!currentUser?.uid) return;
 
     loadFriendRequests();
+    setupFriendRequestsListener();
+
+    // Cleanup listener on unmount
+    return () => {
+      if (friendRequestsListenerRef.current) {
+        friendRequestsListenerRef.current();
+        friendRequestsListenerRef.current = null;
+      }
+    };
   }, [currentUser?.uid]);
+
+  // Reload friend requests when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (currentUser?.uid && activeTab === 'requests') {
+        loadFriendRequests();
+      }
+    }, [currentUser?.uid, activeTab])
+  );
 
   const loadFriendRequests = async () => {
     if (!currentUser?.uid) return;
 
     setIsLoadingRequests(true);
+    setError(null);
     try {
-      // TODO: Implement friend requests loading from Firebase
-      // For now, using empty array
-      setFriendRequests([]);
+      // Query Firebase for pending friend requests where current user is the recipient
+      const requests = await messagingService.getUserFriendRequests(currentUser.uid, 'received');
+
+      // Transform the data to match our UI interface
+      const transformedRequests: FriendRequest[] = requests.map(req => ({
+        id: req.id,
+        senderId: req.senderId,
+        senderName: req.senderName,
+        senderAvatar: req.senderAvatar,
+        recipientId: req.recipientId,
+        recipientName: req.recipientName,
+        status: req.status,
+        createdAt: req.createdAt?.toDate ? req.createdAt.toDate() : new Date(),
+        mutualFriends: 0, // Could be calculated if needed
+      }));
+
+      setFriendRequests(transformedRequests);
+      console.log(`✅ Loaded ${transformedRequests.length} friend requests`);
     } catch (error: any) {
       console.error('Error loading friend requests:', error);
       setError('Failed to load friend requests');
     } finally {
       setIsLoadingRequests(false);
     }
+  };
+
+  const setupFriendRequestsListener = () => {
+    if (!currentUser?.uid) return;
+
+    // Clean up existing listener if any
+    if (friendRequestsListenerRef.current) {
+      friendRequestsListenerRef.current();
+    }
+
+    // Set up real-time listener using onFriendRequests
+    const unsubscribe = messagingService.onFriendRequests(currentUser.uid, (requests) => {
+      // Transform the data to match our UI interface
+      const transformedRequests: FriendRequest[] = requests.map(req => ({
+        id: req.id,
+        senderId: req.senderId,
+        senderName: req.senderName,
+        senderAvatar: req.senderAvatar,
+        recipientId: req.recipientId,
+        recipientName: req.recipientName,
+        status: req.status,
+        createdAt: req.createdAt?.toDate ? req.createdAt.toDate() : new Date(),
+        mutualFriends: 0, // Could be calculated if needed
+      }));
+
+      setFriendRequests(transformedRequests);
+      console.log(`📡 Real-time update: ${transformedRequests.length} friend requests`);
+    });
+
+    friendRequestsListenerRef.current = unsubscribe;
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadFriendRequests();
+    setIsRefreshing(false);
   };
 
   // Debounced search function for real-time autocomplete
@@ -269,13 +344,44 @@ const AddFriendsScreen = () => {
       if (action === 'accept') {
         // Use the proper messaging service to respond to friend requests
         await messagingService.respondToFriendRequest(request.id, 'accepted');
-        Alert.alert('Success', `You are now friends with ${request.fromUserName}`);
+
+        // Mark related notification as read
+        try {
+          const notifications = await notificationService.getUserNotifications(currentUser.uid, 50);
+          const relatedNotification = notifications.find(
+            n => n.type === 'friend_request' &&
+            n.data?.fromUserId === request.senderId &&
+            n.data?.status === 'pending'
+          );
+          if (relatedNotification) {
+            await notificationService.markAsRead(relatedNotification.id);
+          }
+        } catch (notifError) {
+          console.warn('Failed to mark notification as read:', notifError);
+        }
+
+        Alert.alert('Success', `You are now friends with ${request.senderName}`);
       } else {
         // Decline the request
         await messagingService.respondToFriendRequest(request.id, 'declined');
+
+        // Mark related notification as read
+        try {
+          const notifications = await notificationService.getUserNotifications(currentUser.uid, 50);
+          const relatedNotification = notifications.find(
+            n => n.type === 'friend_request' &&
+            n.data?.fromUserId === request.senderId &&
+            n.data?.status === 'pending'
+          );
+          if (relatedNotification) {
+            await notificationService.markAsRead(relatedNotification.id);
+          }
+        } catch (notifError) {
+          console.warn('Failed to mark notification as read:', notifError);
+        }
       }
 
-      // Remove request from list
+      // Remove request from list (will also be removed by real-time listener)
       setFriendRequests(prev => prev.filter(req => req.id !== request.id));
     } catch (error: any) {
       console.error(`Error ${action}ing friend request:`, error);
@@ -323,14 +429,14 @@ const AddFriendsScreen = () => {
 
   const renderFriendRequest = ({ item }: { item: FriendRequest }) => (
     <View style={styles.requestItem}>
-      <Image 
-        source={{ uri: item.fromUserAvatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(item.fromUserName || 'User') + '&background=6E69F4&color=FFFFFF&size=150' }}
-        style={styles.avatar} 
+      <Image
+        source={{ uri: item.senderAvatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(item.senderName || 'User') + '&background=6E69F4&color=FFFFFF&size=150' }}
+        style={styles.avatar}
       />
       <View style={styles.requestInfo}>
-        <Text style={styles.requestName}>{item.fromUserName}</Text>
+        <Text style={styles.requestName}>{item.senderName}</Text>
         <Text style={styles.requestTime}>
-          {item.timestamp.toLocaleDateString()}
+          {item.createdAt.toLocaleDateString()}
         </Text>
         {item.mutualFriends && item.mutualFriends > 0 && (
           <Text style={styles.mutualFriends}>
@@ -386,9 +492,16 @@ const AddFriendsScreen = () => {
             style={[styles.tabBtn, activeTab === 'requests' && styles.tabBtnActive]}
             onPress={() => setActiveTab('requests')}
           >
-            <Text style={[styles.tabText, activeTab === 'requests' && styles.tabTextActive]}>
-              Friend Requests
-            </Text>
+            <View style={styles.tabWithBadge}>
+              <Text style={[styles.tabText, activeTab === 'requests' && styles.tabTextActive]}>
+                Friend Requests
+              </Text>
+              {friendRequests.length > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{friendRequests.length}</Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -443,6 +556,14 @@ const AddFriendsScreen = () => {
                 keyExtractor={(item) => item.id}
                 style={styles.resultsList}
                 showsVerticalScrollIndicator={false}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={isRefreshing}
+                    onRefresh={handleRefresh}
+                    tintColor={PURPLE.base}
+                    colors={[PURPLE.base]}
+                  />
+                }
               />
             ) : (
               <EmptyState message="No pending friend requests" />
@@ -504,6 +625,25 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: '#E5E7EB',
+  },
+  tabWithBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  badge: {
+    backgroundColor: PURPLE.base,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    color: '#0F1115',
+    fontSize: 11,
+    fontWeight: '800',
   },
   searchContainer: {
     flex: 1,
