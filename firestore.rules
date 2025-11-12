@@ -229,8 +229,39 @@ service cloud.firestore {
 
     // NOTIFICATIONS COLLECTIONS
     match /notifications/{notificationId} {
-      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Users can read their own notifications
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Users can update/delete their own notifications (mark as read, etc.)
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Users can create notifications for themselves
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+
+      // Users can create notifications for others (friend requests, profile views, etc.)
+      // This allows User A to create a notification for User B when:
+      // - Sending a friend request (type: friend_request, data.fromUserId must match sender)
+      // - Accepting/declining friend request (type: friend_request_accepted/declined)
+      // - Viewing a profile (type: profile_view, data.viewerId must match viewer)
+      allow create: if isAuthenticated() && (
+        // Friend request notifications
+        (request.resource.data.type == 'friend_request' &&
+         request.resource.data.keys().hasAll(['data']) &&
+         request.resource.data.data.keys().hasAll(['fromUserId']) &&
+         request.resource.data.data.fromUserId == request.auth.uid) ||
+
+        // Friend request response notifications
+        (request.resource.data.type in ['friend_request_accepted', 'friend_request_declined'] &&
+         request.resource.data.keys().hasAll(['data']) &&
+         request.resource.data.data.keys().hasAll(['fromUserId']) &&
+         request.resource.data.data.fromUserId == request.auth.uid) ||
+
+        // Profile view notifications
+        (request.resource.data.type == 'profile_view' &&
+         request.resource.data.keys().hasAll(['data']) &&
+         request.resource.data.data.keys().hasAll(['viewerId']) &&
+         request.resource.data.data.viewerId == request.auth.uid)
+      );
     }
 
     match /notificationCounts/{userId} {

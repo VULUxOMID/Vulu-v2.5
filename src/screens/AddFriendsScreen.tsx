@@ -85,13 +85,18 @@ const AddFriendsScreen = () => {
 
   // Load friend requests on component mount and set up real-time listener
   useEffect(() => {
-    if (!currentUser?.uid) return;
+    if (!currentUser?.uid) {
+      console.log('⚠️ AddFriendsScreen: No current user, skipping friend requests load');
+      return;
+    }
 
+    console.log(`🔄 AddFriendsScreen: Initializing friend requests for user ${currentUser.uid}`);
     loadFriendRequests();
     setupFriendRequestsListener();
 
     // Cleanup listener on unmount
     return () => {
+      console.log('🧹 AddFriendsScreen: Cleaning up friend requests listener');
       if (friendRequestsListenerRef.current) {
         friendRequestsListenerRef.current();
         friendRequestsListenerRef.current = null;
@@ -490,7 +495,10 @@ const AddFriendsScreen = () => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabBtn, activeTab === 'requests' && styles.tabBtnActive]}
-            onPress={() => setActiveTab('requests')}
+            onPress={() => {
+              console.log(`📑 Switching to Friend Requests tab (${friendRequests.length} requests)`);
+              setActiveTab('requests');
+            }}
           >
             <View style={styles.tabWithBadge}>
               <Text style={[styles.tabText, activeTab === 'requests' && styles.tabTextActive]}>

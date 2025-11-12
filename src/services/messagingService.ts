@@ -1359,18 +1359,51 @@ export class MessagingService {
       const requestsRef = collection(db, 'friendRequests');
       const field = type === 'sent' ? 'senderId' : 'recipientId';
 
-      const q = query(
+      let q = query(
         requestsRef,
         where(field, '==', userId),
         where('status', '==', 'pending'),
         orderBy('createdAt', 'desc')
       );
 
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as FriendRequest[];
+      try {
+        const querySnapshot = await getDocs(q);
+        const requests = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as FriendRequest[];
+
+        console.log(`✅ Loaded ${requests.length} ${type} friend requests for user ${userId}`);
+        return requests;
+      } catch (queryError: any) {
+        // If index error, try without orderBy
+        if (queryError.code === 'failed-precondition' || queryError.message?.includes('index')) {
+          console.warn('⚠️ Firestore index not found, querying without orderBy');
+
+          const simpleQuery = query(
+            requestsRef,
+            where(field, '==', userId),
+            where('status', '==', 'pending')
+          );
+
+          const querySnapshot = await getDocs(simpleQuery);
+          const requests = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as FriendRequest[];
+
+          // Sort manually
+          requests.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+            const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+            return bTime - aTime;
+          });
+
+          console.log(`✅ Loaded ${requests.length} ${type} friend requests (manual sort)`);
+          return requests;
+        }
+        throw queryError;
+      }
     } catch (error: any) {
       console.error('Error getting friend requests:', error);
       return [];
@@ -1416,7 +1449,9 @@ export class MessagingService {
   onFriendRequests(userId: string, callback: (requests: FriendRequest[]) => void): () => void {
     try {
       const requestsRef = collection(db, 'friendRequests');
-      const q = query(
+
+      // Try with orderBy first, fall back to without orderBy if index doesn't exist
+      let q = query(
         requestsRef,
         where('recipientId', '==', userId),
         where('status', '==', 'pending'),
@@ -1429,10 +1464,50 @@ export class MessagingService {
           ...doc.data()
         })) as FriendRequest[];
 
+        // Sort manually if needed (in case we fell back to query without orderBy)
+        requests.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+          const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+          return bTime - aTime;
+        });
+
         callback(requests);
-        console.log(`📡 Friend requests listener update: ${requests.length} pending requests`);
+        console.log(`📡 Friend requests listener update: ${requests.length} pending requests for user ${userId}`);
       }, (error) => {
         console.error('Error in friend requests listener:', error);
+
+        // If it's an index error, try without orderBy
+        if (error.code === 'failed-precondition' || error.message?.includes('index')) {
+          console.warn('⚠️ Firestore index not found, using query without orderBy');
+
+          // Retry without orderBy
+          const simpleQuery = query(
+            requestsRef,
+            where('recipientId', '==', userId),
+            where('status', '==', 'pending')
+          );
+
+          return onSnapshot(simpleQuery, (querySnapshot) => {
+            const requests = querySnapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            })) as FriendRequest[];
+
+            // Sort manually
+            requests.sort((a, b) => {
+              const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+              const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+              return bTime - aTime;
+            });
+
+            callback(requests);
+            console.log(`📡 Friend requests listener update (no orderBy): ${requests.length} pending requests`);
+          }, (retryError) => {
+            console.error('Error in friend requests listener (retry):', retryError);
+            callback([]);
+          });
+        }
+
         callback([]);
       });
 
