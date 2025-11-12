@@ -1830,7 +1830,7 @@ const HomeScreen = () => {
       return;
     }
 
-    const conversionRate = 5; // 1 gem = 5 gold
+    const conversionRate = 36; // 1 gem = 36 gold
     const goldToAdd = gems * conversionRate;
 
     try {
@@ -2055,7 +2055,7 @@ const HomeScreen = () => {
     console.log('🔍 Setting up event listener...');
     console.log('🔍 DB initialized?', !!firestoreDb, 'Functions initialized?', !!cloudFunctions);
 
-    const unsubscribe = eventService.onEventSnapshot((event) => {
+    const unsubscribe = eventService.onEventSnapshot(async (event) => {
       if (event) {
         console.log('✅ Event update received:', {
           eventId: event.eventId,
@@ -2085,6 +2085,13 @@ const HomeScreen = () => {
         if (event.cycleNumber !== previousCycleRef.current) {
           setHasEnteredEvent(false);
           previousCycleRef.current = event.cycleNumber;
+
+          // Check if user has actually entered this new cycle from the database
+          if (userProfile?.uid) {
+            const hasEntered = await eventService.hasUserEntered(userProfile.uid);
+            console.log('🔍 Checked entry status for new cycle:', hasEntered);
+            setHasEnteredEvent(hasEntered);
+          }
         }
       } else {
         console.warn('⚠️ No current event found - manageEventCycles may not have run yet');
@@ -2096,6 +2103,25 @@ const HomeScreen = () => {
       unsubscribe();
     };
   }, [userProfile?.uid]);
+
+  // Check if user has entered the current event when it loads
+  useEffect(() => {
+    const checkEntryStatus = async () => {
+      if (!currentEvent || !userProfile?.uid) {
+        return;
+      }
+
+      try {
+        const hasEntered = await eventService.hasUserEntered(userProfile.uid);
+        console.log('🔍 Initial entry status check:', hasEntered);
+        setHasEnteredEvent(hasEntered);
+      } catch (error) {
+        console.error('Failed to check entry status:', error);
+      }
+    };
+
+    checkEntryStatus();
+  }, [currentEvent?.eventId, userProfile?.uid]);
 
   // Update countdown timer every second using server time
   useEffect(() => {

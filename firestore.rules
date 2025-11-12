@@ -11,6 +11,11 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
     // Debug helper function for activeStream access
     function debugActiveStreamAccess(userId) {
       // This will help debug permission issues
@@ -258,7 +263,8 @@ service cloud.firestore {
 
     match /transactions/{transactionId} {
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow write: if false; // Only Cloud Functions can create transactions
+      allow write: if isAdmin(); // Admins can create transactions for currency management
+      allow create: if false; // Regular users cannot create transactions (only Cloud Functions)
     }
 
     // SYNCHRONIZED EVENT SYSTEM
@@ -537,6 +543,26 @@ service cloud.firestore {
 
     match /appVersion/{document=**} {
       allow read: if true; // Public read for app version info
+    }
+
+    // ADMIN-ONLY COLLECTIONS
+    match /adminLogs/{logId} {
+      // Only admins can read and write admin logs
+      allow read, write: if isAdmin();
+    }
+
+    match /moderationReports/{reportId} {
+      // Users can create reports, admins can read/update them
+      allow create: if isAuthenticated();
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Enhanced users collection access for admins
+    match /users/{userId} {
+      // Admins can read all user profiles
+      allow read: if isAdmin();
+      // Admins can update user profiles (for moderation)
+      allow update: if isAdmin();
     }
   }
 }

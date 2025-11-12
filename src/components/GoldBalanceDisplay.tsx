@@ -26,9 +26,9 @@ const GoldBalanceDisplay: React.FC<GoldBalanceDisplayProps> = ({
   const [gemsToConvert, setGemsToConvert] = useState('10');
   const slideAnim = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
-  
+
   // Gold to gem conversion rate
-  const conversionRate = 5; // 1 gem = 5 gold
+  const conversionRate = 36; // 1 gem = 36 gold
 
   const openModal = () => {
     setModalVisible(true);

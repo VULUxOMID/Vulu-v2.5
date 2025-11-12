@@ -1612,6 +1612,46 @@ class FirestoreService {
     // Score based on matching prefix characters
     return matchingChars * 10;
   }
+
+  /**
+   * Update user photos array
+   */
+  async updateUserPhotos(userId: string, photos: Array<{ id: string; uri: string; isProfile: boolean; order: number }>): Promise<void> {
+    try {
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+        photos: photos,
+        photoURL: photos.find(p => p.isProfile)?.uri || null,
+        updatedAt: serverTimestamp()
+      });
+      console.log(`✅ User photos updated for ${userId}`);
+    } catch (error: any) {
+      console.error('Failed to update user photos:', error);
+      FirebaseErrorHandler.logError('updateUserPhotos', error);
+      throw new Error(`Failed to update user photos: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get user photos
+   */
+  async getUserPhotos(userId: string): Promise<Array<{ id: string; uri: string; isProfile: boolean; order: number }>> {
+    try {
+      const userRef = doc(db, 'users', userId);
+      const userDoc = await getDoc(userRef);
+
+      if (!userDoc.exists()) {
+        return [];
+      }
+
+      const userData = userDoc.data();
+      return userData.photos || [];
+    } catch (error: any) {
+      console.error('Failed to get user photos:', error);
+      FirebaseErrorHandler.logError('getUserPhotos', error);
+      return [];
+    }
+  }
 }
 
 export const firestoreService = new FirestoreService();

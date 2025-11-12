@@ -18,9 +18,12 @@ import {
   NativeScrollEvent,
   Vibration,
   Easing,
+  ActivityIndicator,
+  Share,
 } from 'react-native';
 import { LongPressGestureHandler, State, PanGestureHandler } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -46,7 +49,9 @@ import { useUserStatus, STATUS_TYPES, StatusType } from '../context/UserStatusCo
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useGuestRestrictions } from '../hooks/useGuestRestrictions';
+import { useNotifications } from '../context/NotificationContext';
 import firestoreService from '../services/firestoreService';
+import storageService from '../services/storageService';
 import { getDefaultProfileAvatar } from '../utils/defaultAvatars';
 import virtualCurrencyService, { CurrencyBalance } from '../services/virtualCurrencyService';
 import FirebaseErrorHandler from '../utils/firebaseErrorHandler';
@@ -150,17 +155,31 @@ const ProfileScreen = () => {
   
   // Add new state for the photo selection modal
   const [showPhotoOptions, setShowPhotoOptions] = useState(false);
-  
+
   // Add animation ref for photo options modal
   const photoOptionsAnim = useRef(createIsolatedAnimatedValue(0)).current;
 
   // Create isolated scroll tracking value
   const scrollY = useRef(createIsolatedAnimatedValue(0)).current;
-  
+
+  // Photo upload state
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  // Toast state for status updates
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
+  // Image dimensions for preview
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
+
   // Add new state for friends modal and Firebase friends data
   const [showFriendsModal, setShowFriendsModal] = useState(false);
   const [friends, setFriends] = useState<any[]>([]);
   const [friendsLoading, setFriendsLoading] = useState(false);
+
+  // Notification context for badge
+  const { counts } = useNotifications();
 
   
   // Add state for filtered friends and search query
@@ -599,9 +618,8 @@ const ProfileScreen = () => {
             order: index,
           }));
 
-          // Save to Firebase (implement this method in firestoreService if needed)
-          // await firestoreService.updateUserPhotos(user.uid, photoOrder);
-          // Photo order saved successfully (removed console.log to reduce noise)
+          // Save to Firebase
+          await firestoreService.updateUserPhotos(user.uid, photoOrder);
         } catch (error) {
           console.error('Failed to save photo order:', error);
         }
@@ -626,16 +644,123 @@ const ProfileScreen = () => {
     );
   };
 
-  const handleTakePhoto = () => {
+  const handleTakePhoto = async () => {
     hidePhotoOptions();
 
-    Alert.alert('Camera', 'Camera would open here to take a new photo.');
+    try {
+      // Request camera permissions
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'We need camera permissions to take photos.'
+        );
+        return;
+      }
+
+      // Launch camera
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await uploadPhotoToFirebase(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
   };
 
-  const handleUploadPhoto = () => {
+  const handleUploadPhoto = async () => {
     hidePhotoOptions();
 
-    Alert.alert('Photo Library', 'Photo Library would open here to select a photo.');
+    try {
+      // Request media library permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'We need access to your photos to upload images.'
+        );
+        return;
+      }
+
+      // Launch image library
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await uploadPhotoToFirebase(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+      Alert.alert('Error', 'Failed to upload photo. Please try again.');
+    }
+  };
+
+  // Upload photo to Firebase Storage and update Firestore
+  const uploadPhotoToFirebase = async (uri: string) => {
+    if (!user?.uid || isGuest) {
+      Alert.alert('Error', 'You must be signed in to upload photos.');
+      return;
+    }
+
+    try {
+      setIsUploadingPhoto(true);
+      setUploadProgress(0);
+
+      // Generate unique photo ID
+      const photoId = `photo_${Date.now()}`;
+
+      // Upload to Firebase Storage with progress tracking
+      const downloadURL = await storageService.uploadPhoto(
+        uri,
+        user.uid,
+        photoId,
+        (progress) => {
+          setUploadProgress(progress.progress);
+        }
+      );
+
+      // Create new photo object
+      const newPhoto: Photo = {
+        id: photoId,
+        uri: downloadURL,
+        isProfile: photos.length === 0, // First photo is profile image
+      };
+
+      // Update local state
+      const updatedPhotos = [...photos, newPhoto];
+      setPhotos(updatedPhotos);
+
+      // Save to Firestore
+      const photoOrder = updatedPhotos.map((photo, index) => ({
+        id: photo.id,
+        uri: photo.uri,
+        isProfile: photo.isProfile,
+        order: index,
+      }));
+
+      await firestoreService.updateUserPhotos(user.uid, photoOrder);
+
+      console.log('✅ Photo uploaded successfully');
+    } catch (error) {
+      console.error('Failed to upload photo:', error);
+      Alert.alert('Error', 'Failed to upload photo. Please try again.');
+    } finally {
+      setIsUploadingPhoto(false);
+      setUploadProgress(0);
+    }
   };
 
   // Function to show status selector with animation
@@ -670,9 +795,34 @@ const ProfileScreen = () => {
   };
 
   // Function to change status and close menu
-  const changeStatus = (newStatus: StatusType) => {
-    setUserStatus(newStatus);
-    hideStatusMenu();
+  const changeStatus = async (newStatus: StatusType) => {
+    try {
+      // Update status via context (this updates presence service)
+      setUserStatus(newStatus);
+
+      // Write custom status to Firestore user document
+      if (user?.uid && !isGuest) {
+        await firestoreService.updateUser(user.uid, {
+          customStatus: newStatus,
+          statusVisibility: closefriendsOnly ? 'close_friends' : 'everyone',
+          lastStatusUpdate: new Date()
+        });
+      }
+
+      // Get status display text
+      const statusData = STATUS_TYPES.find(s => s.value === newStatus);
+      const statusText = statusData?.text || newStatus;
+
+      // Show success toast
+      setToastMessage(`Status updated to ${statusText}`);
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 2500);
+
+      hideStatusMenu();
+    } catch (error) {
+      console.error('Failed to update status:', error);
+      Alert.alert('Error', 'Failed to update status. Please try again.');
+    }
   };
 
   // Status selector animation calculations
@@ -909,12 +1059,19 @@ const ProfileScreen = () => {
             </View>
           </TouchableOpacity>
           
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={navigateToAccount}
           >
             <View style={styles.actionCircle}>
               <Feather name="settings" size={18} color="#FFFFFF" />
+              {counts.total > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {counts.total > 99 ? '99+' : counts.total}
+                  </Text>
+                </View>
+              )}
             </View>
             <Text style={styles.actionLabel}>Account</Text>
           </TouchableOpacity>
@@ -1126,94 +1283,109 @@ const ProfileScreen = () => {
           </ScrollView>
         </View>
         
-        {/* Gem+ Section */}
+        {/* Subscription Section */}
         <View style={{position: 'relative', marginBottom: 16, paddingHorizontal: 12}}>
-          <TouchableOpacity 
-            onPress={() => toggleGemPlus()}
-            activeOpacity={0.7}
-            style={{
-              backgroundColor: '#1C1D23',
-              paddingVertical: 14,
-              paddingHorizontal: 16,
-              borderRadius: 16
-            }}
-          >
-            <View style={{
-              flexDirection: 'row', 
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              width: '100%'
-            }}>
-              {/* Left side - Title and badge */}
-              <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                <MaterialCommunityIcons
-                  name="diamond-stone"
-                  size={20}
-                  color="#B768FB"
-                  style={{marginRight: 8}}
-                />
-                <Text style={{
-                  color: '#FFFFFF',
-                  fontSize: 16,
-                  fontWeight: 'bold',
-                  marginRight: 8
-                }}>{subscription?.plan === 'free' ? 'Inactive' : subscription?.plan === 'gem_plus' ? 'Gem+' : subscription?.plan === 'premium' ? 'Premium' : subscription?.plan === 'vip' ? 'VIP' : 'Inactive'}</Text>
-                {isSubscriptionActive() && getSubscriptionBadge() && (
+          <View style={styles.subscriptionCard}>
+            <TouchableOpacity
+              onPress={() => toggleGemPlus()}
+              activeOpacity={0.7}
+            >
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%'
+              }}>
+                {/* Left side - Title and badge */}
+                <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                  <MaterialCommunityIcons
+                    name="diamond-stone"
+                    size={20}
+                    color="#B768FB"
+                    style={{marginRight: 8}}
+                  />
+                  <Text style={{
+                    color: '#FFFFFF',
+                    fontSize: 16,
+                    fontWeight: 'bold',
+                    marginRight: 8
+                  }}>{subscription?.plan === 'free' ? 'Free Plan' : subscription?.plan === 'gem_plus' ? 'Gem+' : subscription?.plan === 'premium' ? 'Premium' : subscription?.plan === 'vip' ? 'VIP' : 'Free Plan'}</Text>
+                  {isSubscriptionActive() && getSubscriptionBadge() && (
+                    <View style={{
+                      backgroundColor: getSubscriptionBadge()?.color || '#B768FB',
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 10
+                    }}>
+                      <Text style={{
+                        color: '#FFFFFF',
+                        fontSize: 10,
+                        fontWeight: 'bold'
+                      }}>{getSubscriptionBadge()?.name || 'ACTIVE'}</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Right side - Balance info */}
+                <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                  <View style={{alignItems: 'flex-end', marginRight: 10}}>
+                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                      <Text style={{
+                        color: '#FFFFFF',
+                        fontWeight: 'bold',
+                        fontSize: 18
+                      }}>{currencyBalances.gems}</Text>
+                      <MaterialCommunityIcons
+                        name="diamond-stone"
+                        size={14}
+                        color="rgba(183, 104, 251, 0.7)"
+                        style={{marginLeft: 4}}
+                      />
+                    </View>
+                    <Text style={{
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      fontSize: 10
+                    }}>
+                      {dailyGems > 0 ? `${dailyGems}/day` : 'Upgrade for gems'}
+                    </Text>
+                  </View>
                   <View style={{
-                    backgroundColor: getSubscriptionBadge()?.color || '#B768FB',
+                    backgroundColor: 'rgba(183, 104, 251, 0.15)',
                     paddingHorizontal: 8,
-                    paddingVertical: 3,
-                    borderRadius: 10
+                    paddingVertical: 4,
+                    borderRadius: 6
                   }}>
                     <Text style={{
-                      color: '#FFFFFF',
+                      color: '#B768FB',
                       fontSize: 10,
-                      fontWeight: 'bold'
-                    }}>{getSubscriptionBadge()?.name || 'ACTIVE'}</Text>
+                      fontWeight: '500'
+                    }}>
+                      {isSubscriptionActive() ? `${daysUntilRenewal}d` : 'Upgrade'}
+                    </Text>
                   </View>
-                )}
-              </View>
-              
-              {/* Right side - Balance info */}
-              <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                <View style={{alignItems: 'flex-end', marginRight: 10}}>
-                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                    <Text style={{
-                      color: '#FFFFFF',
-                      fontWeight: 'bold',
-                      fontSize: 18
-                    }}>{currencyBalances.gems}</Text>
-                    <MaterialCommunityIcons
-                      name="diamond-stone"
-                      size={14}
-                      color="rgba(183, 104, 251, 0.7)"
-                      style={{marginLeft: 4}}
-                    />
-                  </View>
-                  <Text style={{
-                    color: 'rgba(255, 255, 255, 0.5)',
-                    fontSize: 10
-                  }}>
-                    {dailyGems > 0 ? `${dailyGems}/day` : 'Upgrade for gems'}
-                  </Text>
-                </View>
-                <View style={{
-                  backgroundColor: 'rgba(183, 104, 251, 0.15)',
-                  paddingHorizontal: 8,
-                  paddingVertical: 4,
-                  borderRadius: 6
-                }}>
-                  <Text style={{
-                    color: '#B768FB',
-                    fontSize: 10,
-                    fontWeight: '500'
-                  }}>
-                    {isSubscriptionActive() ? `${daysUntilRenewal}d` : 'Upgrade'}
-                  </Text>
                 </View>
               </View>
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+
+            {/* Manage Button */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push('/(main)/subscription')}
+              style={styles.manageSubscriptionButton}
+            >
+              <LinearGradient
+                colors={['#B768FB', '#9B4FE8']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.manageSubscriptionGradient}
+              >
+                <Text style={styles.manageSubscriptionText}>
+                  {isSubscriptionActive() ? 'Manage Subscription' : 'Upgrade Now'}
+                </Text>
+                <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </View>
         
         {/* Friends Section - Hidden for guest users */}
@@ -1245,7 +1417,7 @@ const ProfileScreen = () => {
         )}
         
         {/* Spacing for bottom of screen */}
-        <View style={{ height: 120 }} />
+        <View style={{ height: Platform.OS === 'ios' ? 200 : 180 }} />
       </ScrollView>
 
       {/* Status Selector Modal */}
@@ -1865,6 +2037,37 @@ const ProfileScreen = () => {
           />
         </Animated.View>
       )}
+
+      {/* Upload Progress Indicator */}
+      {isUploadingPhoto && (
+        <View style={styles.uploadOverlay}>
+          <BlurView intensity={80} style={styles.uploadBlur}>
+            <View style={styles.uploadContainer}>
+              <ActivityIndicator size="large" color="#5865F2" />
+              <Text style={styles.uploadText}>Uploading photo...</Text>
+              <View style={styles.progressBarContainer}>
+                <View style={[styles.progressBar, { width: `${uploadProgress}%` }]} />
+              </View>
+              <Text style={styles.uploadPercentage}>{Math.round(uploadProgress)}%</Text>
+            </View>
+          </BlurView>
+        </View>
+      )}
+
+      {/* Toast Notification */}
+      {showToast && (
+        <View style={styles.toastContainer}>
+          <LinearGradient
+            colors={['rgba(88, 101, 242, 0.95)', 'rgba(88, 101, 242, 0.85)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.toastGradient}
+          >
+            <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" style={styles.toastIcon} />
+            <Text style={styles.toastText}>{toastMessage}</Text>
+          </LinearGradient>
+        </View>
+      )}
     </View>
   );
 };
@@ -1891,6 +2094,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: Platform.OS === 'ios' ? 180 : 160, // Extra bottom padding for comfortable scrolling
   },
   statusSection: {
     flexDirection: 'row',
@@ -2882,6 +3086,128 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 20,
     textAlign: 'center',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#F04747',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 5,
+    borderWidth: 2,
+    borderColor: '#0f1117',
+  },
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  uploadOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  uploadBlur: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadContainer: {
+    backgroundColor: 'rgba(28, 29, 35, 0.95)',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+    minWidth: 200,
+    borderWidth: 1,
+    borderColor: 'rgba(88, 101, 242, 0.3)',
+  },
+  uploadText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 15,
+    marginBottom: 10,
+  },
+  progressBarContainer: {
+    width: 180,
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginTop: 10,
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#5865F2',
+    borderRadius: 3,
+  },
+  uploadPercentage: {
+    color: '#A8B3BD',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  toastContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 40,
+    left: 20,
+    right: 20,
+    zIndex: 1001,
+  },
+  toastGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  toastIcon: {
+    marginRight: 10,
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+    flex: 1,
+  },
+  subscriptionCard: {
+    backgroundColor: '#1C1D23',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+  },
+  manageSubscriptionButton: {
+    marginTop: 12,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  manageSubscriptionGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  manageSubscriptionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginRight: 6,
   },
 
 });

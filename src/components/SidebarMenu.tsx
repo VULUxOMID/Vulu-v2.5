@@ -69,6 +69,7 @@ const SidebarMenu: React.FC<SidebarMenuProps> = ({ onMenuStateChange }) => {
   const pathname = usePathname();
   const authContext = useAuth();
   const currentUser = authContext?.user || null;
+  const isAdmin = authContext?.isAdmin || false;
   
   // Get both position and expanded state from context
   const menuPositionContext = useContext(MenuPositionContext);
@@ -158,16 +159,31 @@ const SidebarMenu: React.FC<SidebarMenuProps> = ({ onMenuStateChange }) => {
     },
   ];
 
+  // Add admin menu item if user is admin
+  const allMenuItems = isAdmin
+    ? [
+        ...menuItems,
+        {
+          id: 'admin',
+          route: 'admin',
+          icon: (color: string, isActive: boolean) => (
+            <MaterialIcons name="shield" size={24} color={color} />
+          ),
+          label: 'Admin',
+        },
+      ]
+    : menuItems;
+
   // Get active index based on current route
   const getActiveIndex = () => {
     if (!pathname) return -1; // Return -1 when no pathname to avoid highlighting any item
 
-    const index = menuItems.findIndex(item => {
+    const index = allMenuItems.findIndex(item => {
       return pathname.includes(item.route);
     });
 
     // For guest users, don't highlight the Messages button even if on directmessages route
-    if (index >= 0 && menuItems[index].route === 'directmessages' && FirebaseErrorHandler.isGuestUser(currentUser)) {
+    if (index >= 0 && allMenuItems[index].route === 'directmessages' && FirebaseErrorHandler.isGuestUser(currentUser)) {
       return -1; // Don't highlight Messages for guest users
     }
 
@@ -447,9 +463,9 @@ const SidebarMenu: React.FC<SidebarMenuProps> = ({ onMenuStateChange }) => {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.sidebarContent}>
-              {menuItems.map((item, index) => {
+              {allMenuItems.map((item, index) => {
                 const isActive = activeIndex === index;
-                
+
                 return (
                   <Pressable
                     key={item.id}

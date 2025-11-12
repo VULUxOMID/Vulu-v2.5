@@ -39,26 +39,28 @@ function createNewEvent(cycleNumber: number) {
 async function pickWinner(eventId: string, totalEntries: number) {
   // Generate crypto-secure random seed for auditability
   const rngSeed = crypto.randomBytes(32).toString('hex');
-  
+
   // Use the seed to generate a random number
   const hash = crypto.createHash('sha256').update(rngSeed).digest();
   const randomValue = hash.readUInt32BE(0) / 0xFFFFFFFF; // Normalize to 0-1
   const winnerTicket = Math.floor(randomValue * totalEntries);
-  
-  // Fetch winner by ticket number
-  const entriesRef = db.collection('globalEvents').doc(eventId).collection('entries');
+
+  // Fetch winner by ticket number from the current event's entries
+  // Always use 'current' since entries are stored under globalEvents/current/entries
+  const entriesRef = db.collection('globalEvents').doc('current').collection('entries');
   const winnerQuery = await entriesRef
     .where('ticketNumber', '==', winnerTicket)
     .limit(1)
     .get();
-  
+
   if (winnerQuery.empty) {
     console.error(`No entry found for ticket ${winnerTicket}`);
+    console.error(`Event ID: ${eventId}, Total entries: ${totalEntries}, Winner ticket: ${winnerTicket}`);
     return null;
   }
-  
+
   const winnerId = winnerQuery.docs[0].data().userId;
-  
+
   return { winnerId, winnerTicket, rngSeed };
 }
 
@@ -67,26 +69,26 @@ async function pickWinner(eventId: string, totalEntries: number) {
  */
 async function awardPrize(winnerId: string, prizeAmount: number, eventId: string, cycleNumber: number) {
   const userRef = db.collection('users').doc(winnerId);
-  
+
   await db.runTransaction(async (transaction) => {
     const userDoc = await transaction.get(userRef);
-    
+
     if (!userDoc.exists) {
       console.error(`Winner user ${winnerId} not found`);
       return;
     }
-    
+
     const userData = userDoc.data()!;
     const currencyBalances = userData.currencyBalances || { gold: 0, gems: 0, tokens: 0 };
     const currentGold = currencyBalances.gold || 0;
     const newGoldBalance = currentGold + prizeAmount;
-    
+
     // Update user balance
     transaction.update(userRef, {
       'currencyBalances.gold': newGoldBalance,
       'currencyBalances.lastUpdated': admin.firestore.FieldValue.serverTimestamp()
     });
-    
+
     // Create transaction record
     const transactionRef = db.collection('transactions').doc();
     transaction.set(transactionRef, {
@@ -104,7 +106,7 @@ async function awardPrize(winnerId: string, prizeAmount: number, eventId: string
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
   });
-  
+
   console.log({
     action: 'prize_awarded',
     winnerId,
@@ -113,6 +115,60 @@ async function awardPrize(winnerId: string, prizeAmount: number, eventId: string
     cycleNumber,
     timestamp: Date.now()
   });
+}
+
+/**
+ * Helper function to clear all entries from the current event
+ * This must be called outside of a transaction since it involves batch deletes
+ */
+async function clearEventEntries() {
+  try {
+    console.log('🧹 Clearing old event entries...');
+
+    const entriesRef = db.collection('globalEvents').doc('current').collection('entries');
+    const entriesSnapshot = await entriesRef.get();
+
+    if (entriesSnapshot.empty) {
+      console.log('✅ No entries to clear');
+      return;
+    }
+
+    // Delete entries in batches (Firestore limit is 500 per batch)
+    const batchSize = 500;
+    const batches: admin.firestore.WriteBatch[] = [];
+    let currentBatch = db.batch();
+    let operationCount = 0;
+
+    entriesSnapshot.docs.forEach((doc) => {
+      currentBatch.delete(doc.ref);
+      operationCount++;
+
+      if (operationCount === batchSize) {
+        batches.push(currentBatch);
+        currentBatch = db.batch();
+        operationCount = 0;
+      }
+    });
+
+    // Add the last batch if it has operations
+    if (operationCount > 0) {
+      batches.push(currentBatch);
+    }
+
+    // Commit all batches
+    await Promise.all(batches.map(batch => batch.commit()));
+
+    console.log({
+      action: 'entries_cleared',
+      entriesDeleted: entriesSnapshot.size,
+      batchesExecuted: batches.length,
+      timestamp: Date.now()
+    });
+
+  } catch (error: any) {
+    console.error('❌ Error clearing event entries:', error);
+    // Don't throw - this is a cleanup operation and shouldn't fail the whole cycle
+  }
 }
 
 /**
@@ -244,11 +300,11 @@ export const manageEventCycles = functions.pubsub
         }
 
         transaction.set(historyRef, archivedEvent);
-        
+
         // Create next event
         const nextEvent = createNewEvent((event.cycleNumber || 0) + 1);
         transaction.set(eventRef, nextEvent);
-        
+
         console.log({
           action: 'cycle_completed',
           previousEventId: event.eventId,
@@ -259,13 +315,24 @@ export const manageEventCycles = functions.pubsub
           winnerId,
           timestamp: Date.now()
         });
-        
-        // Store winner info for prize awarding after transaction
-        return { winnerId, prizeAmount: event.prizePool, eventId: event.eventId, cycleNumber: event.cycleNumber };
+
+        // Store winner info and event ID for cleanup after transaction
+        return {
+          winnerId,
+          prizeAmount: event.prizePool,
+          eventId: event.eventId,
+          cycleNumber: event.cycleNumber,
+          shouldClearEntries: true
+        };
       }).then(async (result) => {
         // Award prize after transaction commits (if there was a winner)
         if (result && result.winnerId && result.prizeAmount > 0) {
           await awardPrize(result.winnerId, result.prizeAmount, result.eventId, result.cycleNumber);
+        }
+
+        // Clear old entries from the previous cycle (must be done outside transaction)
+        if (result && result.shouldClearEntries) {
+          await clearEventEntries();
         }
       });
       

@@ -28,6 +28,8 @@ interface AuthContextType {
   hasLocalSession: boolean; // ADDED: True if local session token exists and user is restored
   sessionVerified: boolean; // ADDED: True after Firebase verifies the session token
   isGuest: boolean;
+  isAdmin: boolean; // ADDED: True if user has admin privileges
+  adminLevel: string | null; // ADDED: Admin level (super, moderator, support)
   justRegistered: boolean; // ADDED: Track if user just completed registration
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, displayName: string, username: string) => Promise<void>;
@@ -47,6 +49,7 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signInWithApple: () => Promise<void>;
   getSocialAuthMethods: () => { google: boolean; apple: boolean };
+  refreshAdminStatus: () => Promise<void>; // ADDED: Refresh admin status
   // Onboarding methods
   completeOnboarding: (onboardingData: any) => Promise<void>;
   isOnboardingComplete: () => Promise<boolean>;
@@ -252,6 +255,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [hasLocalSession, setHasLocalSession] = useState(false); // ADDED: True if local session exists
   const [sessionVerified, setSessionVerified] = useState(false); // ADDED: True after Firebase verification
   const [isGuest, setIsGuest] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false); // ADDED: Admin status
+  const [adminLevel, setAdminLevel] = useState<string | null>(null); // ADDED: Admin level
   const [justRegistered, setJustRegistered] = useState(false); // ADDED: Track registration completion
 
   // Safe timer instance for memory leak prevention
@@ -378,6 +383,46 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  /**
+   * Check and update admin status
+   */
+  const checkAdminStatus = async (firebaseUser: User) => {
+    try {
+      const tokenResult = await firebaseUser.getIdTokenResult();
+      const adminStatus = tokenResult.claims.admin === true;
+      const level = tokenResult.claims.adminLevel as string | undefined;
+
+      if (mounted.current) {
+        setIsAdmin(adminStatus);
+        setAdminLevel(level || null);
+
+        if (adminStatus) {
+          console.log(`👑 Admin user detected: ${firebaseUser.email} (${level || 'admin'})`);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      if (mounted.current) {
+        setIsAdmin(false);
+        setAdminLevel(null);
+      }
+    }
+  };
+
+  /**
+   * Refresh admin status (force token refresh)
+   */
+  const refreshAdminStatus = async () => {
+    try {
+      const currentUser = authService.getCurrentUser();
+      if (currentUser && 'getIdTokenResult' in currentUser) {
+        await checkAdminStatus(currentUser as User);
+      }
+    } catch (error) {
+      console.error('Error refreshing admin status:', error);
+    }
+  };
+
 
 
   useEffect(() => {
@@ -429,7 +474,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Regular Firebase user - use safe setters
         safeSetUser(firebaseUser);
         safeSetIsGuest(false);
-        
+
+        // Check admin status
+        await checkAdminStatus(firebaseUser);
+
         // Get user profile from Firestore with safe async wrapper
         try {
           const profile = await safeAsync(async () => {
@@ -1162,6 +1210,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     hasLocalSession, // ADDED: True if local session exists
     sessionVerified, // ADDED: True after Firebase verification
     isGuest,
+    isAdmin, // ADDED: Admin status
+    adminLevel, // ADDED: Admin level
     justRegistered, // ADDED: Registration completion flag
     signIn,
     signUp,
@@ -1179,6 +1229,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signInWithGoogle,
     signInWithApple,
     getSocialAuthMethods,
+    refreshAdminStatus, // ADDED: Refresh admin status
     enableBiometricAuth,
     disableBiometricAuth,
     signInWithBiometrics,
