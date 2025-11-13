@@ -1285,6 +1285,26 @@ export class MessagingService {
       const requestRef = doc(db, 'friendRequests', existingRequest.id);
       await deleteDoc(requestRef);
 
+      // Delete the associated notification
+      try {
+        const notificationsRef = collection(db, 'notifications');
+        const q = query(
+          notificationsRef,
+          where('userId', '==', recipientId),
+          where('type', '==', 'friend_request'),
+          where('data.fromUserId', '==', senderId)
+        );
+
+        const querySnapshot = await getDocs(q);
+        const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+
+        console.log(`✅ Deleted ${querySnapshot.docs.length} notification(s) for cancelled friend request`);
+      } catch (notificationError) {
+        console.error('Failed to delete friend request notification:', notificationError);
+        // Don't fail the entire cancellation if notification deletion fails
+      }
+
       console.log(`✅ Friend request cancelled: ${senderId} -> ${recipientId}`);
     } catch (error: any) {
       console.error('Error cancelling friend request:', error);

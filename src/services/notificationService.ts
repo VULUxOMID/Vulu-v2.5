@@ -647,12 +647,33 @@ class NotificationService {
    * Create friend request notification
    */
   async createFriendRequestNotification(
-    toUserId: string, 
-    fromUserId: string, 
-    fromUserName: string, 
+    toUserId: string,
+    fromUserId: string,
+    fromUserName: string,
     fromUserAvatar?: string,
     mutualFriends: number = 0
   ): Promise<string> {
+    // Check if notification already exists
+    try {
+      const notificationsRef = collection(db, 'notifications');
+      const q = query(
+        notificationsRef,
+        where('userId', '==', toUserId),
+        where('type', '==', 'friend_request'),
+        where('data.fromUserId', '==', fromUserId),
+        where('data.status', '==', 'pending')
+      );
+
+      const existingSnapshot = await getDocs(q);
+      if (!existingSnapshot.empty) {
+        console.log('⚠️ Friend request notification already exists, skipping creation');
+        return existingSnapshot.docs[0].id;
+      }
+    } catch (error) {
+      console.error('Error checking for existing notification:', error);
+      // Continue with creation if check fails
+    }
+
     // Prepare data object, filtering out undefined values
     const notificationData: any = {
       fromUserId,

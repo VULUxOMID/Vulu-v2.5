@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, ScrollView, Image, Platform, UIManager, LayoutAnimation, RefreshControl } from 'react-native';
+import { StyleSheet, Text, View, FlatList, TouchableOpacity, ScrollView, Image, Platform, UIManager, LayoutAnimation, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import CommonHeader from '../components/CommonHeader';
@@ -9,6 +9,7 @@ import { useModal } from '../hooks/useModal';
 import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import notificationService, { NotificationData } from '../services/notificationService';
+import messagingService from '../services/messagingService';
 
 const WIDGET_PALETTE = {
   announcement: { accent: '#F59E0B', tint: 'rgba(245,158,11,0.12)' },   // amber
@@ -52,6 +53,8 @@ interface NotificationWidgetProps {
   onNotificationPress: (notification: NotificationData) => void;
   onMarkAllRead: () => void;
   onRefresh: () => void;
+  onAcceptFriendRequest?: (notification: NotificationData) => Promise<void>;
+  onDeclineFriendRequest?: (notification: NotificationData) => Promise<void>;
 }
 
 const NotificationWidget: React.FC<NotificationWidgetProps> = ({
@@ -64,11 +67,14 @@ const NotificationWidget: React.FC<NotificationWidgetProps> = ({
   isMarkingAllRead = false,
   onNotificationPress,
   onMarkAllRead,
-  onRefresh
+  onRefresh,
+  onAcceptFriendRequest,
+  onDeclineFriendRequest
 }) => {
   const palette = WIDGET_PALETTE[type] ?? { accent: iconColor, tint: 'rgba(139,92,246,0.14)' };
   const [isExpanded, setIsExpanded] = useState(false);
   const [visibleCount, setVisibleCount] = useState(3);
+  const [processingRequests, setProcessingRequests] = useState<Set<string>>(new Set());
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -109,6 +115,36 @@ const NotificationWidget: React.FC<NotificationWidgetProps> = ({
   const generateAvatar = (name: string) => {
     const initials = name.split(' ').map(n => n[0]).join('');
     return `https://ui-avatars.com/api/?background=${iconColor.replace('#', '')}&color=fff&name=${initials}&size=200`;
+  };
+
+  const handleAcceptRequest = async (notification: NotificationData) => {
+    if (!onAcceptFriendRequest || processingRequests.has(notification.id)) return;
+
+    setProcessingRequests(prev => new Set(prev).add(notification.id));
+    try {
+      await onAcceptFriendRequest(notification);
+    } finally {
+      setProcessingRequests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(notification.id);
+        return newSet;
+      });
+    }
+  };
+
+  const handleDeclineRequest = async (notification: NotificationData) => {
+    if (!onDeclineFriendRequest || processingRequests.has(notification.id)) return;
+
+    setProcessingRequests(prev => new Set(prev).add(notification.id));
+    try {
+      await onDeclineFriendRequest(notification);
+    } finally {
+      setProcessingRequests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(notification.id);
+        return newSet;
+      });
+    }
   };
 
   return (
@@ -187,6 +223,9 @@ const NotificationWidget: React.FC<NotificationWidgetProps> = ({
                       senderAvatar = generateAvatar(senderName);
                   }
 
+                  const isProcessing = processingRequests.has(notification.id);
+                  const isFriendRequest = type === 'friend_request' && notification.data?.status === 'pending';
+
                   return (
                     <TouchableOpacity
                       key={notification.id}
@@ -194,8 +233,9 @@ const NotificationWidget: React.FC<NotificationWidgetProps> = ({
                         styles.notificationItem,
                         !notification.read && { backgroundColor: palette.tint }
                       ]}
-                      onPress={() => onNotificationPress(notification)}
-                      activeOpacity={0.7}
+                      onPress={() => !isFriendRequest && onNotificationPress(notification)}
+                      activeOpacity={isFriendRequest ? 1 : 0.7}
+                      disabled={isFriendRequest}
                     >
                       <Image source={{ uri: senderAvatar }} style={styles.notificationAvatar} />
                       <View style={styles.notificationContent}>
@@ -204,7 +244,28 @@ const NotificationWidget: React.FC<NotificationWidgetProps> = ({
                         </Text>
                         <Text style={styles.notificationTime}>{formatTime(notification.timestamp)}</Text>
                       </View>
-                      {!notification.read && <View style={[styles.unreadIndicator, { backgroundColor: palette.accent }]} />}
+
+                      {/* Friend Request Action Buttons - Inline */}
+                      {isFriendRequest && !isProcessing ? (
+                        <View style={styles.friendRequestActions}>
+                          <TouchableOpacity
+                            style={[styles.actionButton, styles.declineButton]}
+                            onPress={() => handleDeclineRequest(notification)}
+                            activeOpacity={0.7}
+                          >
+                            <MaterialIcons name="close" size={16} color="#FF3B30" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.actionButton, styles.acceptButton]}
+                            onPress={() => handleAcceptRequest(notification)}
+                            activeOpacity={0.7}
+                          >
+                            <MaterialIcons name="check" size={16} color="#FFFFFF" />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        !notification.read && <View style={[styles.unreadIndicator, { backgroundColor: palette.accent }]} />
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -247,6 +308,73 @@ const NotificationsScreen = () => {
   const friendRequests = notifications.filter(n => n.type === 'friend_request');
   const profileViews = notifications.filter(n => n.type === 'profile_view');
   const activities = notifications.filter(n => n.type === 'activity');
+
+  const handleAcceptFriendRequest = async (notification: NotificationData) => {
+    if (!user?.uid) return;
+
+    try {
+      console.log('🤝 Accepting friend request from notification:', notification.id);
+
+      // Get the friend request ID from notification data
+      const senderId = notification.data.fromUserId;
+      const senderName = notification.data.fromUserName;
+
+      // Find the friend request document
+      const friendRequests = await messagingService.getUserFriendRequests(user.uid, 'received');
+      const friendRequest = friendRequests.find(req => req.senderId === senderId && req.status === 'pending');
+
+      if (!friendRequest) {
+        console.error('Friend request not found');
+        return;
+      }
+
+      // Accept the friend request
+      await messagingService.respondToFriendRequest(friendRequest.id, 'accepted', user.uid);
+
+      // Mark notification as read
+      await markNotificationAsRead(notification.id);
+
+      // Refresh notifications to update the list
+      await refreshNotifications();
+
+      console.log('✅ Friend request accepted successfully');
+    } catch (error) {
+      console.error('Error accepting friend request:', error);
+    }
+  };
+
+  const handleDeclineFriendRequest = async (notification: NotificationData) => {
+    if (!user?.uid) return;
+
+    try {
+      console.log('❌ Declining friend request from notification:', notification.id);
+
+      // Get the friend request ID from notification data
+      const senderId = notification.data.fromUserId;
+
+      // Find the friend request document
+      const friendRequests = await messagingService.getUserFriendRequests(user.uid, 'received');
+      const friendRequest = friendRequests.find(req => req.senderId === senderId && req.status === 'pending');
+
+      if (!friendRequest) {
+        console.error('Friend request not found');
+        return;
+      }
+
+      // Decline the friend request
+      await messagingService.respondToFriendRequest(friendRequest.id, 'declined', user.uid);
+
+      // Mark notification as read
+      await markNotificationAsRead(notification.id);
+
+      // Refresh notifications to update the list
+      await refreshNotifications();
+
+      console.log('✅ Friend request declined successfully');
+    } catch (error) {
+      console.error('Error declining friend request:', error);
+    }
+  };
 
   const handleNotificationPress = async (notification: NotificationData) => {
     try {
@@ -434,6 +562,8 @@ const NotificationsScreen = () => {
           onNotificationPress={handleNotificationPress}
           onMarkAllRead={() => handleMarkAllRead('friend_request')}
           onRefresh={handleRefresh}
+          onAcceptFriendRequest={handleAcceptFriendRequest}
+          onDeclineFriendRequest={handleDeclineFriendRequest}
         />
 
         <NotificationWidget
@@ -571,7 +701,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     backgroundColor: '#1E1F25',
   },
-
   notificationAvatar: {
     width: 40,
     height: 40,
@@ -598,6 +727,26 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     marginLeft: 8,
+  },
+  friendRequestActions: {
+    flexDirection: 'row',
+    gap: 6,
+    marginLeft: 8,
+  },
+  actionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acceptButton: {
+    backgroundColor: '#8B5CF6',
+  },
+  declineButton: {
+    backgroundColor: 'rgba(255, 59, 48, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 59, 48, 0.3)',
   },
   moreButton: {
     flexDirection: 'row',

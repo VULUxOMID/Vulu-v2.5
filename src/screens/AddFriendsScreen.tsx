@@ -61,6 +61,7 @@ const AddFriendsScreen = () => {
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lastSearchQuery, setLastSearchQuery] = useState('');
   const friendRequestsListenerRef = useRef<(() => void) | null>(null);
+  const [sendingRequests, setSendingRequests] = useState<Set<string>>(new Set());
 
   // Smart navigation back function
   const handleGoBack = useCallback(() => {
@@ -281,7 +282,10 @@ const AddFriendsScreen = () => {
   }, []); // Empty dependency array - cleanup only on unmount
 
   const sendFriendRequest = async (targetUser: User) => {
-    if (!currentUser?.uid) return;
+    if (!currentUser?.uid || sendingRequests.has(targetUser.id)) return;
+
+    // Add to sending requests set to prevent duplicate sends
+    setSendingRequests(prev => new Set(prev).add(targetUser.id));
 
     try {
       // Use the proper friend request system instead of direct add
@@ -308,11 +312,21 @@ const AddFriendsScreen = () => {
     } catch (error: any) {
       console.error('Error sending friend request:', error);
       Alert.alert('Error', 'Failed to send friend request. Please try again.');
+    } finally {
+      // Remove from sending requests set
+      setSendingRequests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(targetUser.id);
+        return newSet;
+      });
     }
   };
 
   const cancelFriendRequest = async (targetUser: User) => {
-    if (!currentUser?.uid) return;
+    if (!currentUser?.uid || sendingRequests.has(targetUser.id)) return;
+
+    // Add to sending requests set to prevent duplicate actions
+    setSendingRequests(prev => new Set(prev).add(targetUser.id));
 
     try {
       // Cancel the friend request
@@ -331,6 +345,13 @@ const AddFriendsScreen = () => {
     } catch (error: any) {
       console.error('Error cancelling friend request:', error);
       Alert.alert('Error', 'Failed to cancel friend request. Please try again.');
+    } finally {
+      // Remove from sending requests set
+      setSendingRequests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(targetUser.id);
+        return newSet;
+      });
     }
   };
 
@@ -410,6 +431,14 @@ const AddFriendsScreen = () => {
         <PillButton
           title="Friends"
           variant="outline"
+          size="sm"
+          onPress={() => {}}
+          disabled={true}
+        />
+      ) : sendingRequests.has(item.id) ? (
+        <PillButton
+          title="..."
+          variant="ghost"
           size="sm"
           onPress={() => {}}
           disabled={true}
