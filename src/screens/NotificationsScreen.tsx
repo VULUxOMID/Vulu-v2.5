@@ -9,7 +9,7 @@ import { useModal } from '../hooks/useModal';
 import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import notificationService, { NotificationData } from '../services/notificationService';
-import messagingService from '../services/messagingService';
+import { messagingService } from '../services/messagingService';
 
 const WIDGET_PALETTE = {
   announcement: { accent: '#F59E0B', tint: 'rgba(245,158,11,0.12)' },   // amber
@@ -316,20 +316,29 @@ const NotificationsScreen = () => {
       console.log('🤝 Accepting friend request from notification:', notification.id);
 
       // Get the friend request ID from notification data
+      const friendRequestId = notification.data.friendRequestId;
       const senderId = notification.data.fromUserId;
-      const senderName = notification.data.fromUserName;
 
-      // Find the friend request document
-      const friendRequests = await messagingService.getUserFriendRequests(user.uid, 'received');
-      const friendRequest = friendRequests.find(req => req.senderId === senderId && req.status === 'pending');
+      if (!friendRequestId) {
+        console.warn('Friend request ID not found in notification data, using fallback');
+        // Fallback: try to find the friend request
+        const friendRequests = await messagingService.getUserFriendRequests(user.uid, 'received');
+        const friendRequest = friendRequests.find(req => req.senderId === senderId && req.status === 'pending');
 
-      if (!friendRequest) {
-        console.error('Friend request not found');
-        return;
+        if (!friendRequest) {
+          console.warn('Friend request not found - likely already processed. Deleting stale notification.');
+          // Delete the stale notification
+          await notificationService.deleteNotification(notification.id);
+          // Refresh to remove from UI
+          await refreshNotifications();
+          return;
+        }
+
+        await messagingService.respondToFriendRequest(friendRequest.id, 'accepted', user.uid);
+      } else {
+        // Accept the friend request using the ID from notification
+        await messagingService.respondToFriendRequest(friendRequestId, 'accepted', user.uid);
       }
-
-      // Accept the friend request
-      await messagingService.respondToFriendRequest(friendRequest.id, 'accepted', user.uid);
 
       // Mark notification as read
       await markNotificationAsRead(notification.id);
@@ -350,19 +359,29 @@ const NotificationsScreen = () => {
       console.log('❌ Declining friend request from notification:', notification.id);
 
       // Get the friend request ID from notification data
+      const friendRequestId = notification.data.friendRequestId;
       const senderId = notification.data.fromUserId;
 
-      // Find the friend request document
-      const friendRequests = await messagingService.getUserFriendRequests(user.uid, 'received');
-      const friendRequest = friendRequests.find(req => req.senderId === senderId && req.status === 'pending');
+      if (!friendRequestId) {
+        console.warn('Friend request ID not found in notification data, using fallback');
+        // Fallback: try to find the friend request
+        const friendRequests = await messagingService.getUserFriendRequests(user.uid, 'received');
+        const friendRequest = friendRequests.find(req => req.senderId === senderId && req.status === 'pending');
 
-      if (!friendRequest) {
-        console.error('Friend request not found');
-        return;
+        if (!friendRequest) {
+          console.warn('Friend request not found - likely already processed. Deleting stale notification.');
+          // Delete the stale notification
+          await notificationService.deleteNotification(notification.id);
+          // Refresh to remove from UI
+          await refreshNotifications();
+          return;
+        }
+
+        await messagingService.respondToFriendRequest(friendRequest.id, 'declined', user.uid);
+      } else {
+        // Decline the friend request using the ID from notification
+        await messagingService.respondToFriendRequest(friendRequestId, 'declined', user.uid);
       }
-
-      // Decline the friend request
-      await messagingService.respondToFriendRequest(friendRequest.id, 'declined', user.uid);
 
       // Mark notification as read
       await markNotificationAsRead(notification.id);

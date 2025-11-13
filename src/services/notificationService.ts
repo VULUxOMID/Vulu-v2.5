@@ -651,7 +651,8 @@ class NotificationService {
     fromUserId: string,
     fromUserName: string,
     fromUserAvatar?: string,
-    mutualFriends: number = 0
+    mutualFriends: number = 0,
+    friendRequestId?: string
   ): Promise<string> {
     // Check if notification already exists
     try {
@@ -681,6 +682,11 @@ class NotificationService {
       mutualFriends,
       status: 'pending'
     };
+
+    // Include friend request ID if provided
+    if (friendRequestId) {
+      notificationData.friendRequestId = friendRequestId;
+    }
 
     // Only include fromUserAvatar if it's defined
     if (fromUserAvatar !== undefined && fromUserAvatar !== null) {

@@ -1255,7 +1255,8 @@ export class MessagingService {
           senderId,
           senderName,
           senderAvatar || undefined,
-          0 // mutualFriends - could be calculated if needed
+          0, // mutualFriends - could be calculated if needed
+          requestRef.id // Pass the friend request ID
         );
         console.log(`✅ Friend request notification sent to ${recipientName}`);
       } catch (notificationError) {
