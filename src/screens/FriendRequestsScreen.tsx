@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -34,6 +34,8 @@ const FriendRequestsScreen = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [processingRequests, setProcessingRequests] = useState<Set<string>>(new Set());
+  const receivedListenerRef = useRef<(() => void) | null>(null);
+  const sentListenerRef = useRef<(() => void) | null>(null);
 
   // Smart navigation back function
   const handleGoBack = useCallback(() => {
@@ -56,33 +58,64 @@ const FriendRequestsScreen = () => {
     }
   }, [params.source]);
 
-  useEffect(() => {
-    if (currentUser && canAddFriends) {
-      loadFriendRequests();
-    }
-  }, [currentUser, canAddFriends]);
+  const loadSentRequests = useCallback(async () => {
+    if (!currentUser) return;
 
-  const loadFriendRequests = async () => {
+    try {
+      const sent = await messagingService.getUserFriendRequests(currentUser.uid, 'sent');
+      setSentRequests(sent);
+    } catch (error: any) {
+      console.error('Error loading sent friend requests:', error);
+    }
+  }, [currentUser]);
+
+  const loadFriendRequests = useCallback(async () => {
     if (!currentUser) return;
 
     try {
       setIsLoading(true);
       setError(null);
 
-      const [received, sent] = await Promise.all([
-        messagingService.getUserFriendRequests(currentUser.uid, 'received'),
-        messagingService.getUserFriendRequests(currentUser.uid, 'sent')
-      ]);
-
-      setReceivedRequests(received);
-      setSentRequests(sent);
+      // Received requests are handled by real-time listener, just load sent
+      await loadSentRequests();
     } catch (error: any) {
       console.error('Error loading friend requests:', error);
       setError('Failed to load friend requests');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentUser, loadSentRequests]);
+
+  // Set up real-time listeners for friend requests
+  useEffect(() => {
+    if (!currentUser || !canAddFriends) return;
+
+    // Set up listener for received requests
+    const receivedUnsubscribe = messagingService.onFriendRequests(currentUser.uid, (requests) => {
+      setReceivedRequests(requests);
+      console.log(`📡 Real-time update: ${requests.length} received friend requests`);
+    });
+    receivedListenerRef.current = receivedUnsubscribe;
+
+    // Set up listener for sent requests (so cancelled requests disappear in real-time)
+    const sentUnsubscribe = messagingService.onSentFriendRequests(currentUser.uid, (requests) => {
+      setSentRequests(requests);
+      console.log(`📡 Real-time update: ${requests.length} sent friend requests`);
+    });
+    sentListenerRef.current = sentUnsubscribe;
+
+    // Cleanup listeners on unmount
+    return () => {
+      if (receivedListenerRef.current) {
+        receivedListenerRef.current();
+        receivedListenerRef.current = null;
+      }
+      if (sentListenerRef.current) {
+        sentListenerRef.current();
+        sentListenerRef.current = null;
+      }
+    };
+  }, [currentUser, canAddFriends]);
 
   const handleAcceptRequest = async (request: FriendRequest) => {
     if (!currentUser) return;
@@ -148,8 +181,9 @@ const FriendRequestsScreen = () => {
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await loadFriendRequests();
+    await loadSentRequests();
     setIsRefreshing(false);
-  }, []);
+  }, [loadFriendRequests, loadSentRequests]);
 
   const renderReceivedRequestItem = ({ item: request }: { item: FriendRequest }) => {
     const isProcessing = processingRequests.has(request.id);

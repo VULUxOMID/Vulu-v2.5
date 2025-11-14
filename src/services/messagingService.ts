@@ -1289,20 +1289,42 @@ export class MessagingService {
       // Delete the associated notification
       try {
         const notificationsRef = collection(db, 'notifications');
-        const q = query(
+        
+        // Try to find notification by friendRequestId first (most reliable)
+        let q = query(
           notificationsRef,
           where('userId', '==', recipientId),
           where('type', '==', 'friend_request'),
-          where('data.fromUserId', '==', senderId)
+          where('data.friendRequestId', '==', existingRequest.id)
         );
 
-        const querySnapshot = await getDocs(q);
-        const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
-        await Promise.all(deletePromises);
+        let querySnapshot = await getDocs(q);
+        
+        // If not found by friendRequestId, try by senderId (fallback for older notifications)
+        if (querySnapshot.empty) {
+          q = query(
+            notificationsRef,
+            where('userId', '==', recipientId),
+            where('type', '==', 'friend_request'),
+            where('data.fromUserId', '==', senderId)
+          );
+          querySnapshot = await getDocs(q);
+        }
 
-        console.log(`✅ Deleted ${querySnapshot.docs.length} notification(s) for cancelled friend request`);
-      } catch (notificationError) {
-        console.error('Failed to delete friend request notification:', notificationError);
+        if (!querySnapshot.empty) {
+          const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
+          await Promise.all(deletePromises);
+          console.log(`✅ Deleted ${querySnapshot.docs.length} notification(s) for cancelled friend request`);
+        } else {
+          console.warn('⚠️ No notification found to delete for cancelled friend request');
+        }
+      } catch (notificationError: any) {
+        // Handle permission errors gracefully
+        if (notificationError.code === 'permission-denied') {
+          console.warn('⚠️ Permission denied deleting notification - may need to be deleted by recipient');
+        } else {
+          console.error('Failed to delete friend request notification:', notificationError);
+        }
         // Don't fail the entire cancellation if notification deletion fails
       }
 
@@ -1321,15 +1343,55 @@ export class MessagingService {
     response: 'accepted' | 'declined'
   ): Promise<void> {
     try {
-      await runTransaction(db, async (transaction) => {
-        const requestRef = doc(db, 'friendRequests', requestId);
-        const requestSnap = await transaction.get(requestRef);
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
 
-        if (!requestSnap.exists()) {
+      // First, verify the user has permission to respond to this request
+      // This prevents permission errors in the transaction
+      const requestRef = doc(db, 'friendRequests', requestId);
+      
+      let requestSnap;
+      try {
+        requestSnap = await getDoc(requestRef);
+      } catch (error: any) {
+        // Handle permission errors gracefully
+        if (error.code === 'permission-denied') {
+          console.error('Permission denied reading friend request:', error);
+          throw new Error('You do not have permission to access this friend request. It may have been cancelled or you may not be the recipient.');
+        }
+        throw error;
+      }
+
+      if (!requestSnap.exists()) {
+        // Friend request doesn't exist - it may have been cancelled or already processed
+        console.warn(`Friend request ${requestId} not found - may have been cancelled or already processed`);
+        throw new Error('This friend request no longer exists. It may have been cancelled or already processed.');
+      }
+
+      const request = requestSnap.data() as FriendRequest;
+
+      // Verify the current user is the recipient (only recipient can accept/decline)
+      if (request.recipientId !== currentUser.uid) {
+        throw new Error('You do not have permission to respond to this friend request');
+      }
+
+      // Check if request is already processed
+      if (request.status !== 'pending') {
+        throw new Error(`This friend request has already been ${request.status}`);
+      }
+
+      // Now run the transaction
+      await runTransaction(db, async (transaction) => {
+        const requestSnapInTransaction = await transaction.get(requestRef);
+
+        if (!requestSnapInTransaction.exists()) {
           throw new Error('Friend request not found');
         }
 
-        const request = requestSnap.data() as FriendRequest;
+        const requestInTransaction = requestSnapInTransaction.data() as FriendRequest;
 
         // Update request status
         transaction.update(requestRef, {
@@ -1340,12 +1402,12 @@ export class MessagingService {
         // If accepted, create friendship
         if (response === 'accepted') {
           const friendshipData: Omit<Friendship, 'id'> = {
-            userId1: request.senderId,
-            userId2: request.recipientId,
-            user1Name: request.senderName,
-            user2Name: request.recipientName,
-            user1Avatar: request.senderAvatar || null, // Use null instead of undefined
-            user2Avatar: request.recipientAvatar || null, // Use null instead of undefined
+            userId1: requestInTransaction.senderId,
+            userId2: requestInTransaction.recipientId,
+            user1Name: requestInTransaction.senderName,
+            user2Name: requestInTransaction.recipientName,
+            user1Avatar: requestInTransaction.senderAvatar || null, // Use null instead of undefined
+            user2Avatar: requestInTransaction.recipientAvatar || null, // Use null instead of undefined
             status: 'active',
             createdAt: serverTimestamp() as Timestamp
           };
@@ -1354,15 +1416,15 @@ export class MessagingService {
           transaction.set(friendshipRef, friendshipData);
 
           // Update user documents to include friend IDs
-          const user1Ref = doc(db, 'users', request.senderId);
-          const user2Ref = doc(db, 'users', request.recipientId);
+          const user1Ref = doc(db, 'users', requestInTransaction.senderId);
+          const user2Ref = doc(db, 'users', requestInTransaction.recipientId);
 
           transaction.update(user1Ref, {
-            friends: arrayUnion(request.recipientId)
+            friends: arrayUnion(requestInTransaction.recipientId)
           });
 
           transaction.update(user2Ref, {
-            friends: arrayUnion(request.senderId)
+            friends: arrayUnion(requestInTransaction.senderId)
           });
         }
       });
@@ -1465,7 +1527,7 @@ export class MessagingService {
   }
 
   /**
-   * Listen to friend requests in real-time
+   * Listen to friend requests in real-time (received requests)
    */
   onFriendRequests(userId: string, callback: (requests: FriendRequest[]) => void): () => void {
     try {
@@ -1536,6 +1598,83 @@ export class MessagingService {
       return unsubscribe;
     } catch (error: any) {
       console.error('Error setting up friend requests listener:', error);
+      callback([]);
+      return () => {}; // Return empty unsubscribe function
+    }
+  }
+
+  /**
+   * Listen to sent friend requests in real-time
+   */
+  onSentFriendRequests(userId: string, callback: (requests: FriendRequest[]) => void): () => void {
+    try {
+      const requestsRef = collection(db, 'friendRequests');
+
+      // Try with orderBy first, fall back to without orderBy if index doesn't exist
+      let q = query(
+        requestsRef,
+        where('senderId', '==', userId),
+        where('status', '==', 'pending'),
+        orderBy('createdAt', 'desc')
+      );
+
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const requests = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as FriendRequest[];
+
+        // Sort manually if needed
+        requests.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+          const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+          return bTime - aTime;
+        });
+
+        callback(requests);
+        console.log(`📡 Sent friend requests listener update: ${requests.length} pending sent requests for user ${userId}`);
+      }, (error) => {
+        console.error('Error in sent friend requests listener:', error);
+
+        // If it's an index error, try without orderBy
+        if (error.code === 'failed-precondition' || error.message?.includes('index')) {
+          console.warn('⚠️ Firestore index not found for sent requests, using query without orderBy');
+
+          // Retry without orderBy
+          const simpleQuery = query(
+            requestsRef,
+            where('senderId', '==', userId),
+            where('status', '==', 'pending')
+          );
+
+          return onSnapshot(simpleQuery, (querySnapshot) => {
+            const requests = querySnapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            })) as FriendRequest[];
+
+            // Sort manually
+            requests.sort((a, b) => {
+              const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+              const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+              return bTime - aTime;
+            });
+
+            callback(requests);
+            console.log(`📡 Sent friend requests listener update (no orderBy): ${requests.length} pending sent requests`);
+          }, (retryError) => {
+            console.error('Error in sent friend requests listener (retry):', retryError);
+            callback([]);
+          });
+        }
+
+        callback([]);
+      });
+
+      console.log(`📡 Started sent friend requests listener for user ${userId}`);
+      return unsubscribe;
+    } catch (error: any) {
+      console.error('Error setting up sent friend requests listener:', error);
       callback([]);
       return () => {}; // Return empty unsubscribe function
     }

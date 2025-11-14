@@ -635,45 +635,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const userIdentifier = email.toLowerCase().trim();
 
     try {
-      // Check if account is locked
+      // Check if account is locked (must be done first)
       const lockInfo = await securityService.isAccountLocked(userIdentifier);
       if (lockInfo.isLocked) {
         const remainingTime = lockInfo.lockUntil ? Math.ceil((lockInfo.lockUntil - Date.now()) / 1000 / 60) : 0;
         throw new Error(`Account temporarily locked due to too many failed attempts. Please try again in ${remainingTime} minutes.`);
       }
 
-      // Log login attempt
-      await securityService.logSecurityEvent({
+      // Log login attempt (fire-and-forget, don't block)
+      securityService.logSecurityEvent({
         type: 'login_attempt',
         userIdentifier,
-      });
+      }).catch(err => console.warn('Failed to log login attempt:', err));
 
-      // CRITICAL: Mark onboarding as completed BEFORE Firebase sign-in
-      // This prevents race condition where onAuthStateChanged fires before flag is set
-      // Manual sign-in = returning user, so they've already completed onboarding
-      try {
-        await markOnboardingCompleted();
-        console.log('✅ Onboarding flag set BEFORE sign-in (prevents flash)');
-      } catch (onboardingError) {
-        console.warn('⚠️ Failed to set onboarding flag:', onboardingError);
-        // Don't fail the sign-in if onboarding flag fails
+      // Run these in parallel to speed up login
+      const [onboardingResult, guestClearResult] = await Promise.allSettled([
+        // CRITICAL: Mark onboarding as completed BEFORE Firebase sign-in
+        // This prevents race condition where onAuthStateChanged fires before flag is set
+        markOnboardingCompleted().then(() => {
+          console.log('✅ Onboarding flag set BEFORE sign-in (prevents flash)');
+        }),
+        // Clear any existing guest session
+        authService.clearGuestUser()
+      ]);
+
+      if (onboardingResult.status === 'rejected') {
+        console.warn('⚠️ Failed to set onboarding flag:', onboardingResult.reason);
       }
 
-      // Clear any existing guest session
-      await authService.clearGuestUser();
+      // Perform Firebase sign-in (this is the critical path)
       const firebaseUser = await authService.signIn(email, password);
 
-      // Clear failed attempts on successful login
-      await securityService.clearFailedAttempts(userIdentifier);
-
-      // Log successful login
-      await securityService.logSecurityEvent({
-        type: 'login_success',
-        userIdentifier,
-      });
-
-      // Start new session
-      await sessionService.startSession();
+      // Run post-login operations in parallel (don't block user experience)
+      Promise.allSettled([
+        // Clear failed attempts on successful login
+        securityService.clearFailedAttempts(userIdentifier),
+        // Log successful login (fire-and-forget)
+        securityService.logSecurityEvent({
+          type: 'login_success',
+          userIdentifier,
+        }),
+        // Start new session
+        sessionService.startSession()
+      ]).catch(err => console.warn('Post-login operations failed:', err));
 
       // Save profile for quick sign-in (non-guest users only)
       // Wait a bit for userProfile to be loaded by onAuthStateChanged

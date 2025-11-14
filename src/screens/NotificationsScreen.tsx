@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, ScrollView, Image, Platform, UIManager, LayoutAnimation, RefreshControl, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, FlatList, TouchableOpacity, ScrollView, Image, Platform, UIManager, LayoutAnimation, RefreshControl, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import CommonHeader from '../components/CommonHeader';
@@ -331,13 +331,14 @@ const NotificationsScreen = () => {
           await notificationService.deleteNotification(notification.id);
           // Refresh to remove from UI
           await refreshNotifications();
+          Alert.alert('Request Already Processed', 'This friend request has already been processed or cancelled.');
           return;
         }
 
-        await messagingService.respondToFriendRequest(friendRequest.id, 'accepted', user.uid);
+        await messagingService.respondToFriendRequest(friendRequest.id, 'accepted');
       } else {
         // Accept the friend request using the ID from notification
-        await messagingService.respondToFriendRequest(friendRequestId, 'accepted', user.uid);
+        await messagingService.respondToFriendRequest(friendRequestId, 'accepted');
       }
 
       // Mark notification as read
@@ -347,8 +348,21 @@ const NotificationsScreen = () => {
       await refreshNotifications();
 
       console.log('✅ Friend request accepted successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error accepting friend request:', error);
+      // Handle the case where request doesn't exist
+      if (error.message?.includes('no longer exists') || error.message?.includes('not found')) {
+        // Delete the stale notification
+        try {
+          await notificationService.deleteNotification(notification.id);
+          await refreshNotifications();
+        } catch (deleteError) {
+          console.error('Error deleting stale notification:', deleteError);
+        }
+        Alert.alert('Request Already Processed', 'This friend request has already been processed or cancelled.');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to accept friend request. Please try again.');
+      }
     }
   };
 
@@ -374,13 +388,14 @@ const NotificationsScreen = () => {
           await notificationService.deleteNotification(notification.id);
           // Refresh to remove from UI
           await refreshNotifications();
+          Alert.alert('Request Already Processed', 'This friend request has already been processed or cancelled.');
           return;
         }
 
-        await messagingService.respondToFriendRequest(friendRequest.id, 'declined', user.uid);
+        await messagingService.respondToFriendRequest(friendRequest.id, 'declined');
       } else {
         // Decline the friend request using the ID from notification
-        await messagingService.respondToFriendRequest(friendRequestId, 'declined', user.uid);
+        await messagingService.respondToFriendRequest(friendRequestId, 'declined');
       }
 
       // Mark notification as read
@@ -390,8 +405,21 @@ const NotificationsScreen = () => {
       await refreshNotifications();
 
       console.log('✅ Friend request declined successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error declining friend request:', error);
+      // Handle the case where request doesn't exist
+      if (error.message?.includes('no longer exists') || error.message?.includes('not found')) {
+        // Delete the stale notification
+        try {
+          await notificationService.deleteNotification(notification.id);
+          await refreshNotifications();
+        } catch (deleteError) {
+          console.error('Error deleting stale notification:', deleteError);
+        }
+        Alert.alert('Request Already Processed', 'This friend request has already been processed or cancelled.');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to decline friend request. Please try again.');
+      }
     }
   };
 
