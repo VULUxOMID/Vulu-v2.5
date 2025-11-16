@@ -13,6 +13,7 @@ import {
   FlatList,
   Dimensions,
   Platform,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLiveStreams } from '../context/LiveStreamContext';
 import { streamingService } from '../services/streamingService';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Conditional import for camera - only available in development builds
 let Camera: any = null;
@@ -31,6 +33,10 @@ try {
 }
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+// Storage keys for tracking permission requests (one-time only)
+const MIC_PERMISSION_REQUESTED_KEY = '@vulu_mic_permission_requested';
+const CAMERA_PERMISSION_REQUESTED_KEY = '@vulu_camera_permission_requested';
 
 interface LiveTag {
   id: string;
@@ -63,52 +69,97 @@ const LiveStreamSetupScreen: React.FC = () => {
   const [streamTitle, setStreamTitle] = useState('');
   const [selectedTag, setSelectedTag] = useState<LiveTag>(LIVE_TAGS[0]);
   const [showTagModal, setShowTagModal] = useState(false);
-  const [cameraEnabled, setCameraEnabled] = useState(true);
-  const [microphoneEnabled, setMicrophoneEnabled] = useState(true);
+  const [cameraEnabled, setCameraEnabled] = useState(false); // Disabled by default (audio-only)
+  const [microphoneEnabled, setMicrophoneEnabled] = useState(true); // Enabled by default
   const [isCreatingStream, setIsCreatingStream] = useState(false);
-  const [permissionsGranted, setPermissionsGranted] = useState(isExpoGo); // Default to true in Expo Go
   const [showPermissionWarning, setShowPermissionWarning] = useState(false);
+  
+  // Permission tracking state
+  const [micPermissionRequested, setMicPermissionRequested] = useState(false);
+  const [cameraPermissionRequested, setCameraPermissionRequested] = useState(false);
+  const [micPermissionStatus, setMicPermissionStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  const [cameraPermissionStatus, setCameraPermissionStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown');
 
-  // Check permissions on component mount
+  // Load permission request history and check current status on mount
   useEffect(() => {
-    checkPermissions();
-  }, []);
+    const initializePermissions = async () => {
+      await loadPermissionHistory();
+      await checkCurrentPermissions();
+    };
+    
+    initializePermissions();
+  }, []); // Only run once on mount
 
-  const checkPermissions = async () => {
+  // Request microphone permission automatically when screen is ready
+  // This ensures iOS system dialog shows as soon as user enters the screen
+  useEffect(() => {
+    if (isExpoGo || !isCameraAvailable) {
+      return;
+    }
+
+    // Request permission immediately when screen loads (microphone is enabled by default)
+    // This will show iOS system dialog if permission status is 'undetermined'
+    const requestPermission = async () => {
+      // Small delay to ensure UI is rendered
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log('🔄 Auto-requesting microphone permission on screen load...');
+      await requestMicrophonePermissionIfNeeded();
+    };
+
+    requestPermission();
+  }, []); // Only run once on mount
+
+  // Load permission request history from AsyncStorage
+  const loadPermissionHistory = async () => {
     try {
-      // Check if we're in Expo Go environment
-      if (isExpoGo || !isCameraAvailable) {
-        console.log('📱 Running in Expo Go - Camera permissions not available');
-        console.log('ℹ️ Camera permissions will be handled in production build');
-        setPermissionsGranted(true); // Allow setup to continue in development
+      const micRequested = await AsyncStorage.getItem(MIC_PERMISSION_REQUESTED_KEY);
+      const cameraRequested = await AsyncStorage.getItem(CAMERA_PERMISSION_REQUESTED_KEY);
+      
+      setMicPermissionRequested(micRequested === 'true');
+      setCameraPermissionRequested(cameraRequested === 'true');
+      
+      console.log('📋 Permission history loaded:', {
+        micRequested: micRequested === 'true',
+        cameraRequested: cameraRequested === 'true'
+      });
+    } catch (error) {
+      console.error('Error loading permission history:', error);
+    }
+  };
+
+  // Check current permission status (without requesting)
+  const checkCurrentPermissions = async () => {
+    try {
+      if (isExpoGo) {
+        // In Expo Go, we can't check real permissions
         setShowPermissionWarning(true);
         return;
       }
 
-      // Only request permissions in development/production builds
-      console.log('🔐 Requesting camera and microphone permissions...');
-      const cameraPermission = await Camera.requestCameraPermissionsAsync();
-      const audioPermission = await Camera.requestMicrophonePermissionsAsync();
+      // Check microphone permission status (using Camera API for iOS compatibility)
+      if (isCameraAvailable) {
+        try {
+          const audioStatus = await Camera.getMicrophonePermissionsAsync();
+          setMicPermissionStatus(audioStatus.status === 'granted' ? 'granted' : 'denied');
+          console.log('🎤 Microphone permission status:', audioStatus.status);
+        } catch (error) {
+          console.log('Could not check microphone permission:', error);
+        }
+      }
 
-      const granted = cameraPermission.status === 'granted' && audioPermission.status === 'granted';
-      setPermissionsGranted(granted);
-
-      if (granted) {
-        console.log('✅ Camera and microphone permissions granted');
-      } else {
-        console.log('❌ Camera or microphone permissions denied');
+      // Check camera permission status (if available, but we won't use it)
+      if (isCameraAvailable) {
+        try {
+          const cameraStatus = await Camera.getCameraPermissionsAsync();
+          setCameraPermissionStatus(cameraStatus.status === 'granted' ? 'granted' : 'denied');
+          console.log('📷 Camera permission status:', cameraStatus.status);
+        } catch (error) {
+          console.log('Could not check camera permission:', error);
+        }
       }
     } catch (error) {
-      console.error('❌ Error checking permissions:', error);
-
-      // Fallback for any permission errors
-      if (isExpoGo) {
-        console.log('🔄 Fallback: Allowing setup to continue in Expo Go');
-        setPermissionsGranted(true);
-        setShowPermissionWarning(true);
-      } else {
-        setPermissionsGranted(false);
-      }
+      console.error('Error checking current permissions:', error);
     }
   };
 
@@ -125,24 +176,127 @@ const LiveStreamSetupScreen: React.FC = () => {
     setShowTagModal(false);
   };
 
-  const handleGoLive = async () => {
-    if (!user) {
-      Alert.alert('Error', 'You must be signed in to start a live stream.');
+  // Request microphone permission (shared logic)
+  // This will show iOS system dialog if permission status is 'undetermined'
+  const requestMicrophonePermissionIfNeeded = async (showAlertOnPermanentDenial: boolean = false): Promise<boolean> => {
+    if (isExpoGo || !isCameraAvailable) {
+      return true; // Allow in Expo Go
+    }
+
+    try {
+      // Always check the current permission status first
+      console.log('🎤 Checking microphone permission status...');
+      const currentStatus = await Camera.getMicrophonePermissionsAsync();
+      console.log('📋 Current microphone permission status:', {
+        status: currentStatus.status,
+        canAskAgain: currentStatus.canAskAgain,
+        granted: currentStatus.granted
+      });
+
+      // If already granted, we're good - update state and return
+      if (currentStatus.status === 'granted' || currentStatus.granted === true) {
+        console.log('✅ Microphone permission already granted');
+        setMicPermissionStatus('granted');
+        setMicPermissionRequested(true);
+        return true;
+      }
+
+      // Always try to request permission - iOS will decide whether to show the dialog
+      // iOS will show system dialog if status is 'undetermined' (first time asking)
+      // iOS will show dialog again if status is 'denied' but canAskAgain is true
+      // iOS will NOT show dialog if status is 'denied' and canAskAgain is false (permanently blocked)
+      const status = currentStatus.status;
+      const canAskAgain = currentStatus.canAskAgain !== false; // Default to true if not specified
+      
+      console.log('📋 Permission status before request:', {
+        status,
+        canAskAgain,
+        willShowIOSDialog: status === 'undetermined' || (status === 'denied' && canAskAgain)
+      });
+
+      // Always attempt to request permission - iOS will handle showing the dialog appropriately
+      // If status is 'undetermined', iOS WILL show the system dialog
+      // If status is 'denied' and canAskAgain is true, iOS MIGHT show the dialog again
+      // If status is 'denied' and canAskAgain is false, iOS will NOT show the dialog (permanently blocked)
+      console.log('🎤 Requesting microphone permission - iOS will show system dialog if needed...');
+      console.log('📱 If permission status is "undetermined", iOS will show native dialog with "Allow" and "Don\'t Allow" options');
+      
+      // IMPORTANT: This call will trigger iOS system permission dialog if status is 'undetermined'
+      // The user will see the native iOS dialog with "Allow" and "Don't Allow" buttons
+      // If status is 'denied', iOS might not show the dialog - it depends on canAskAgain
+      const audioStatus = await Camera.requestMicrophonePermissionsAsync();
+      
+      console.log('📋 Permission response after request:', {
+        status: audioStatus.status,
+        granted: audioStatus.granted,
+        canAskAgain: audioStatus.canAskAgain
+      });
+      
+      // Update permission status based on response
+      const wasGranted = audioStatus.status === 'granted' || audioStatus.granted === true;
+      setMicPermissionStatus(wasGranted ? 'granted' : 'denied');
+      
+      // Mark as requested (so we remember we've asked)
+      await AsyncStorage.setItem(MIC_PERMISSION_REQUESTED_KEY, 'true');
+      setMicPermissionRequested(true);
+
+      if (wasGranted) {
+        console.log('✅ Microphone permission granted by user via iOS system dialog');
+        return true;
+      } else {
+        console.log('❌ Microphone permission denied or not granted');
+        
+        // Check if permission is permanently blocked (can't show iOS dialog anymore)
+        const isPermanentlyBlocked = audioStatus.status === 'denied' && 
+                                    audioStatus.canAskAgain === false;
+        
+        // IMPORTANT: Never show blocking alerts here
+        // The iOS system dialog will show if status is 'undetermined'
+        // If permission is denied, user can still proceed - don't block them
+        console.log('ℹ️ Permission denied - status:', status, 'canAskAgain:', audioStatus.canAskAgain);
+        
+        // Don't show any alerts here - let the user proceed
+        // The iOS system dialog already appeared if status was 'undetermined'
+        // If permission is denied, user can still go live (audio won't work)
+        
+        // User can still proceed to go live (audio just won't work)
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Error requesting microphone permission:', error);
+      // On error, don't block the user - let them proceed
+      return false;
+    }
+  };
+
+  // Handle microphone toggle - request permission when enabled
+  const handleMicrophoneToggle = async (value: boolean) => {
+    setMicrophoneEnabled(value);
+
+    // Only proceed if user is enabling microphone
+    if (!value || isExpoGo || !isCameraAvailable) {
       return;
     }
 
-    // Title is now optional - no validation needed
+    // Request permission (this will show iOS system dialog if needed)
+    await requestMicrophonePermissionIfNeeded();
+  };
 
-    // Handle permissions based on environment
-    if (!permissionsGranted && !isExpoGo) {
-      Alert.alert(
-        'Permissions Required',
-        'Camera and microphone permissions are required to start a live stream.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Grant Permissions', onPress: checkPermissions }
-        ]
-      );
+  // Handle camera toggle - disabled for now (audio-only)
+  const handleCameraToggle = (value: boolean) => {
+    // Camera is disabled for now - don't allow toggling
+    // This will be enabled in the future when video streaming is ready
+    console.log('📷 Camera toggle disabled - audio-only streaming only');
+    Alert.alert(
+      'Camera Disabled',
+      'Camera access is currently disabled. We\'re focusing on audio-only streaming for now. Video streaming will be available in a future update.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleGoLive = async () => {
+    if (!user) {
+      Alert.alert('Error', 'You must be signed in to start a live stream.');
       return;
     }
 
@@ -162,7 +316,25 @@ const LiveStreamSetupScreen: React.FC = () => {
       return;
     }
 
-    // Proceed with stream creation
+    // If microphone is enabled, ensure we've requested permission before proceeding
+    // This ensures iOS system dialog appears if permission status is 'undetermined'
+    if (microphoneEnabled && !isExpoGo && isCameraAvailable) {
+      console.log('🎤 Ensuring microphone permission is requested before going live...');
+      
+      // Request permission - this will show iOS system dialog if status is 'undetermined'
+      // Pass false to showAlertOnPermanentDenial so we DON'T show alert here
+      // We only want to show alert if user explicitly needs to go to settings
+      // But actually, let's check status first and only show alert if permanently blocked
+      const permissionGranted = await requestMicrophonePermissionIfNeeded(false);
+      
+      // Don't block here - always allow user to proceed
+      // Even if permission is denied, user can go live (audio just won't work)
+      console.log('ℹ️ Permission request completed - user can proceed regardless of result');
+    }
+
+    // ALWAYS proceed with stream creation (even if permissions are denied)
+    // Users can go live without microphone/camera, but audio won't work
+    // Never block the user - let them proceed and show a non-blocking notification if needed
     proceedWithStreamCreation();
   };
 
@@ -178,8 +350,9 @@ const LiveStreamSetupScreen: React.FC = () => {
         title: finalTitle,
         originalTitle: streamTitle.trim(),
         tag: selectedTag.label,
-        cameraEnabled,
+        cameraEnabled: false, // Always false for now (audio-only)
         microphoneEnabled,
+        micPermissionStatus,
         hostId: user.uid,
         hostName: user.displayName || 'Host',
         hostAvatar: user.photoURL || 'https://via.placeholder.com/150/6E69F4/FFFFFF?text=H',
@@ -206,7 +379,7 @@ const LiveStreamSetupScreen: React.FC = () => {
         isHost: 'true',
         viewCount: '0',
         tag: selectedTag.label,
-        cameraEnabled: cameraEnabled.toString(),
+        cameraEnabled: 'false', // Always false for now (audio-only)
         microphoneEnabled: microphoneEnabled.toString(),
         createdAt: Date.now().toString(),
         hostId: user.uid,
@@ -327,11 +500,11 @@ const LiveStreamSetupScreen: React.FC = () => {
             }
           </Text>
 
-          {/* Privacy disclosure for camera and microphone usage */}
+          {/* Privacy disclosure for microphone usage */}
           <View style={styles.privacyNote}>
             <Text style={styles.privacyNoteText}>
-              We use your camera and microphone only while you are live. Your
-              audio and video are transmitted for streaming and are not stored on
+              We use your microphone only while you are live. Your
+              audio is transmitted for streaming and is not stored on
               your device.
             </Text>
           </View>
@@ -341,32 +514,59 @@ const LiveStreamSetupScreen: React.FC = () => {
             <View style={styles.developmentWarning}>
               <Ionicons name="information-circle" size={16} color="#FFD700" />
               <Text style={styles.developmentWarningText}>
-                Running in Expo Go - Camera permissions are simulated
+                Running in Expo Go - Permissions will be handled in production build
               </Text>
             </View>
           )}
           
+          {/* Camera Toggle - DISABLED (Audio-only for now) */}
           <View style={styles.permissionItem}>
             <View style={styles.permissionLeft}>
-              <Ionicons name="videocam" size={24} color="#FFFFFF" />
-              <Text style={styles.permissionText}>Enable camera access</Text>
+              <Ionicons name="videocam" size={24} color="#666666" />
+              <View style={styles.permissionTextContainer}>
+                <Text style={[styles.permissionText, styles.disabledText]}>Enable camera access</Text>
+                <Text style={styles.disabledLabel}>(Audio-only for now)</Text>
+              </View>
             </View>
             <Switch
-              value={cameraEnabled}
-              onValueChange={setCameraEnabled}
-              trackColor={{ false: '#3E3E3E', true: '#FFD700' }}
-              thumbColor={cameraEnabled ? '#FFFFFF' : '#FFFFFF'}
+              value={false}
+              onValueChange={handleCameraToggle}
+              trackColor={{ false: '#3E3E3E', true: '#3E3E3E' }}
+              thumbColor="#666666"
+              disabled={true}
             />
           </View>
 
+          {/* Microphone Toggle - ENABLED */}
           <View style={styles.permissionItem}>
             <View style={styles.permissionLeft}>
-              <Ionicons name="mic" size={24} color="#FFFFFF" />
-              <Text style={styles.permissionText}>Enable Microphone Access</Text>
+              <Ionicons 
+                name="mic" 
+                size={24} 
+                color={
+                  micPermissionStatus === 'granted' 
+                    ? '#4CAF50' 
+                    : microphoneEnabled 
+                      ? '#FFFFFF' 
+                      : '#666666'
+                } 
+              />
+              <View style={styles.permissionTextContainer}>
+                <Text style={styles.permissionText}>Enable Microphone Access</Text>
+                {micPermissionStatus === 'granted' && micPermissionRequested && (
+                  <Text style={styles.permissionStatusText}>✓ Granted</Text>
+                )}
+                {micPermissionStatus === 'denied' && micPermissionRequested && (
+                  <Text style={styles.permissionDeniedText}>✗ Denied - Enable in Settings</Text>
+                )}
+                {micPermissionRequested && micPermissionStatus === 'unknown' && (
+                  <Text style={styles.permissionStatusText}>ℹ️ Check your settings</Text>
+                )}
+              </View>
             </View>
             <Switch
               value={microphoneEnabled}
-              onValueChange={setMicrophoneEnabled}
+              onValueChange={handleMicrophoneToggle}
               trackColor={{ false: '#3E3E3E', true: '#FFD700' }}
               thumbColor={microphoneEnabled ? '#FFFFFF' : '#FFFFFF'}
             />
@@ -520,10 +720,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
+  permissionTextContainer: {
+    marginLeft: 12,
+    flex: 1,
+  },
   permissionText: {
     color: '#FFFFFF',
     fontSize: 16,
-    marginLeft: 12,
+  },
+  disabledText: {
+    color: '#666666',
+  },
+  disabledLabel: {
+    color: '#666666',
+    fontSize: 12,
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  permissionStatusText: {
+    color: '#4CAF50',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  permissionDeniedText: {
+    color: '#FF6B6B',
+    fontSize: 12,
+    marginTop: 2,
   },
   goLiveButton: {
     backgroundColor: PURPLE.base,

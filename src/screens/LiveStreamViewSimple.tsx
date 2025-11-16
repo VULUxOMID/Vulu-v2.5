@@ -110,7 +110,7 @@ const LiveStreamViewSimple = () => {
         const storageStatus = permissionService.getStorageStatus();
         console.log('📱 Permission service status:', storageStatus);
 
-        // Only require microphone when hosting
+        // Only check microphone permission when hosting (don't block if denied)
         if (isHost) {
           const hasPermissions = permissionService.hasRequiredPermissions();
           console.log('🎤 Current permission state:', { hasPermissions });
@@ -123,21 +123,24 @@ const LiveStreamViewSimple = () => {
             console.log('✅ Permission request result:', result);
 
             if (!result.microphone) {
-              console.log('❌ Microphone permission denied');
-              Alert.alert(
-                'Permission Required',
-                permissionService.handlePermissionDenied('microphone'),
-                [{ text: 'OK', onPress: () => router.back() }]
-              );
-              return;
+              console.log('❌ Microphone permission denied - but allowing user to continue');
+              console.log('ℹ️ User can still go live, but audio won\'t work');
+              // DON'T block the user - allow them to proceed even without permissions
+              // They can still go live (audio just won't work)
+              setPermissionsGranted(false); // Set to false so audio features are disabled
+              // Continue execution - don't return or show blocking alert
+            } else {
+              console.log('✅ Microphone permission granted');
+              setPermissionsGranted(true);
             }
           } else {
             console.log('✅ Microphone permission already granted');
+            setPermissionsGranted(true);
           }
+        } else {
+          // Viewers don't need mic permission to watch
+          setPermissionsGranted(true);
         }
-
-        // Viewers don't need mic permission to watch
-        setPermissionsGranted(true);
       } catch (error) {
         console.error('❌ Permission initialization failed:', error);
         setPermissionsGranted(true); // don't block viewing
