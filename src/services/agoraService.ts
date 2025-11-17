@@ -382,8 +382,26 @@ class AgoraService {
 
     // Join channel success
     // Register the primary event listener
-    this.rtcEngine.addListener('JoinChannelSuccess', async (channel: string, uid: number, elapsed: number) => {
-      console.log('✅ [JoinChannelSuccess] Successfully joined channel:', channel, 'UID:', uid, 'elapsed:', elapsed);
+    // NOTE: Agora v4.5.3+ passes an object instead of separate params: { channelId: string, localUid: number }
+    this.rtcEngine.addListener('JoinChannelSuccess', async (...args: any[]) => {
+      // Handle both old and new callback formats
+      let channel: string;
+      let uid: number;
+      let elapsed: number = 0;
+
+      if (args.length === 1 && typeof args[0] === 'object' && args[0].channelId) {
+        // New format: single object parameter
+        channel = args[0].channelId;
+        uid = args[0].localUid;
+        console.log('✅ [JoinChannelSuccess] Successfully joined channel:', channel, 'UID:', uid, '(new format)');
+      } else {
+        // Old format: separate parameters
+        channel = args[0];
+        uid = args[1];
+        elapsed = args[2] || 0;
+        console.log('✅ [JoinChannelSuccess] Successfully joined channel:', channel, 'UID:', uid, 'elapsed:', elapsed);
+      }
+
       this.streamState.isJoined = true;
       this.streamState.channelName = channel;
       this.streamState.localUid = uid;
@@ -428,8 +446,25 @@ class AgoraService {
     // Also try alternative event names (some SDK versions use different names)
     // These will only fire if the event name matches, so no harm in registering multiple
     try {
-      this.rtcEngine.addListener('onJoinChannelSuccess', async (channel: string, uid: number, elapsed: number) => {
-        console.log('✅ [onJoinChannelSuccess] Successfully joined channel:', channel, 'UID:', uid);
+      this.rtcEngine.addListener('onJoinChannelSuccess', async (...args: any[]) => {
+        // Handle both old and new callback formats
+        let channel: string;
+        let uid: number;
+        let elapsed: number = 0;
+
+        if (args.length === 1 && typeof args[0] === 'object' && args[0].channelId) {
+          // New format: single object parameter
+          channel = args[0].channelId;
+          uid = args[0].localUid;
+          console.log('✅ [onJoinChannelSuccess] Successfully joined channel:', channel, 'UID:', uid, '(new format)');
+        } else {
+          // Old format: separate parameters
+          channel = args[0];
+          uid = args[1];
+          elapsed = args[2] || 0;
+          console.log('✅ [onJoinChannelSuccess] Successfully joined channel:', channel, 'UID:', uid);
+        }
+
         // Same handling as above, but check if already resolved to avoid double resolution
         if (!this.streamState.isJoined && this.joinChannelPromise) {
           this.streamState.isJoined = true;
@@ -732,7 +767,7 @@ class AgoraService {
         }
 
         // Different channel/UID: leave first to avoid ERR_JOIN_CHANNEL_REJECTED (-17)
-        console.log(`ℹ️ Already joined ${this.streamState.channelName}, leaving before joining ${channelName}`);
+        console.log('ℹ️ Already joined', this.streamState.channelName, '- leaving before joining', channelName);
         await this.leaveChannel();
       }
 
