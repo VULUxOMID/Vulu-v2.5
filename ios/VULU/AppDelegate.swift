@@ -24,21 +24,14 @@ public class AppDelegate: ExpoAppDelegate {
 
 #if os(iOS) || os(tvOS)
     // UIScene lifecycle support for iOS 13+
-    // For iOS 13+, window creation is handled by SceneDelegate
-    // For iOS 12 and below, create window here
+    // For iOS 13+, window creation and React Native initialization is handled by SceneDelegate
+    // For iOS 12 and below, create window and start React Native here
     if #available(iOS 13.0, *) {
-      // Window will be created by SceneDelegate when scene connects
-      // Only start React Native here if no scene delegate is available (fallback)
-      if UIApplication.shared.connectedScenes.isEmpty {
-        // Fallback: create window if no scene is available
-        window = UIWindow(frame: UIScreen.main.bounds)
-        factory.startReactNative(
-          withModuleName: "main",
-          in: window,
-          launchOptions: launchOptions)
-      }
+      // iOS 13+: Do NOT start React Native here - SceneDelegate will handle it
+      // This prevents double initialization which causes assertion failures
+      print("📱 [AppDelegate] iOS 13+ detected - SceneDelegate will handle React Native initialization")
     } else {
-      // Fallback for iOS 12 and below
+      // iOS 12 and below: Create window and start React Native here
       window = UIWindow(frame: UIScreen.main.bounds)
       factory.startReactNative(
         withModuleName: "main",

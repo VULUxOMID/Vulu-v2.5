@@ -19,13 +19,19 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     window = UIWindow(windowScene: windowScene)
     window?.makeKeyAndVisible()
     
+    // Get launch options from AppDelegate if available
+    // Note: For scene-based apps, launchOptions might be nil, but that's okay
+    let launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    
     // Start React Native with the scene's window
+    // This is the ONLY place React Native should be started for iOS 13+
+    print("🚀 [SceneDelegate] Starting React Native with scene window...")
     factory.startReactNative(
       withModuleName: "main",
       in: window,
-      launchOptions: nil)
+      launchOptions: launchOptions)
     
-    print("✅ [SceneDelegate] Scene connected and React Native started")
+    print("✅ [SceneDelegate] Scene connected and React Native started successfully")
   }
 
   func sceneDidDisconnect(_ scene: UIScene) {
