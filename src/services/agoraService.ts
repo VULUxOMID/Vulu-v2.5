@@ -332,20 +332,56 @@ class AgoraService {
 
     // Connection state changed
     this.rtcEngine.addListener('ConnectionStateChanged', (state: ConnectionStateType, reason: ConnectionChangedReason) => {
-      console.log(`🔗 Connection state changed: ${state}, reason: ${reason}`);
+      console.log(`🔗 Connection state changed: state=${state} (${typeof state}), reason=${reason} (${typeof reason})`);
+      console.log(`🔗 ConnectionStateType.Connected=${ConnectionStateType.Connected}, ConnectionChangedReason.JoinSuccess=${ConnectionChangedReason.JoinSuccess}`);
       this.streamState.connectionState = state;
+      
+      // FALLBACK: If JoinChannelSuccess doesn't fire, use ConnectionStateChanged as backup
+      // When state is Connected (3) and reason is JoinSuccess (1), treat as successful join
+      // Check both enum values and numeric values for compatibility
+      const isConnected = state === ConnectionStateType.Connected || state === 3;
+      const isJoinSuccess = reason === ConnectionChangedReason.JoinSuccess || reason === 1;
+      
+      if (isConnected && isJoinSuccess) {
+        console.log('✅ Connection state indicates successful join (fallback detection)');
+        console.log(`🔍 Checking if we should resolve: joinChannelPromise exists=${!!this.joinChannelPromise}, isJoined=${this.streamState.isJoined}`);
+        
+        // Only resolve if we're waiting for a join and haven't already resolved
+        if (this.joinChannelPromise && this.streamState.isJoined === false) {
+          // Get channel name and UID from current state (they should be set by now)
+          const channelName = this.streamState.channelName || '';
+          const uid = this.streamState.localUid || 0;
+          
+          console.log(`✅ Resolving join promise via ConnectionStateChanged fallback: channel=${channelName}, uid=${uid}`);
+          
+          this.streamState.isJoined = true;
+          clearTimeout(this.joinChannelPromise.timeout);
+          this.joinChannelPromise.resolve(true);
+          this.joinChannelPromise = null;
+          
+          // Trigger the onJoinChannelSuccess callback for consistency
+          this.eventCallbacks.onJoinChannelSuccess?.(channelName, uid, 0);
+        } else if (this.joinChannelPromise && this.streamState.isJoined === true) {
+          console.log('ℹ️ Join already marked as successful, skipping fallback resolution');
+        } else if (!this.joinChannelPromise) {
+          console.log('ℹ️ No join promise pending, skipping fallback resolution');
+        }
+      }
+      
       this.eventCallbacks.onConnectionStateChanged?.(state, reason);
     });
 
     // Join channel success
+    // Register the primary event listener
     this.rtcEngine.addListener('JoinChannelSuccess', async (channel: string, uid: number, elapsed: number) => {
-      console.log(`✅ Successfully joined channel: ${channel} with UID: ${uid}`);
+      console.log(`✅ [JoinChannelSuccess] Successfully joined channel: ${channel} with UID: ${uid}, elapsed: ${elapsed}ms`);
       this.streamState.isJoined = true;
       this.streamState.channelName = channel;
       this.streamState.localUid = uid;
       
       // Resolve the join promise if it exists
       if (this.joinChannelPromise) {
+        console.log('✅ Resolving join promise via JoinChannelSuccess callback');
         clearTimeout(this.joinChannelPromise.timeout);
         this.joinChannelPromise.resolve(true);
         this.joinChannelPromise = null;
@@ -381,6 +417,27 @@ class AgoraService {
       
       this.eventCallbacks.onJoinChannelSuccess?.(channel, uid, elapsed);
     });
+    
+    // Also try alternative event names (some SDK versions use different names)
+    // These will only fire if the event name matches, so no harm in registering multiple
+    try {
+      this.rtcEngine.addListener('onJoinChannelSuccess', async (channel: string, uid: number, elapsed: number) => {
+        console.log(`✅ [onJoinChannelSuccess] Successfully joined channel: ${channel} with UID: ${uid}`);
+        // Same handling as above, but check if already resolved to avoid double resolution
+        if (!this.streamState.isJoined && this.joinChannelPromise) {
+          this.streamState.isJoined = true;
+          this.streamState.channelName = channel;
+          this.streamState.localUid = uid;
+          clearTimeout(this.joinChannelPromise.timeout);
+          this.joinChannelPromise.resolve(true);
+          this.joinChannelPromise = null;
+          this.eventCallbacks.onJoinChannelSuccess?.(channel, uid, elapsed);
+        }
+      });
+    } catch (e) {
+      // Event name doesn't exist, that's fine
+      console.log('ℹ️ Alternative event name "onJoinChannelSuccess" not available');
+    }
 
     // Leave channel
     this.rtcEngine.addListener('LeaveChannel', (stats: any) => {
@@ -720,6 +777,11 @@ class AgoraService {
         console.log(`✅ Engine ready after ${readyCheckAttempts * 300}ms`);
       }
       
+      // Store channel name and UID before creating promise (for fallback detection)
+      // This allows ConnectionStateChanged fallback to access them
+      this.streamState.channelName = channelName;
+      this.streamState.localUid = uid;
+      
       // Create a promise that will resolve when JoinChannelSuccess callback fires
       return new Promise<boolean>((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -727,6 +789,7 @@ class AgoraService {
             this.joinChannelPromise = null;
           }
           console.error('❌ Join channel timeout - JoinChannelSuccess callback did not fire within 15 seconds');
+          console.error('❌ This usually means the event listener is not firing. Check ConnectionStateChanged events.');
           reject(new Error('Join channel timeout - callback did not fire within 15 seconds'));
         }, 15000); // 15 second timeout (increased to allow more time for engine to become ready)
         
