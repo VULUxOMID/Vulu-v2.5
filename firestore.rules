@@ -362,15 +362,40 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
                    request.auth.uid == request.resource.data.hostId;
 
-      // Stream updates - host or participant (via participants subcollection) or moderator
+      // Stream updates - host, participant, moderator, or viewers joining
       allow update: if isAuthenticated() && (
+        // Host can update anything
         request.auth.uid == resource.data.hostId ||
-        // Treat presence in participants subcollection as membership
+        
+        // Existing participants can update (via participants subcollection)
         exists(/databases/$(database)/documents/streams/$(streamId)/participants/$(request.auth.uid)) ||
+        
         // Moderators can also update
         (
           resource.data.moderatorIds != null &&
           request.auth.uid in resource.data.moderatorIds
+        ) ||
+        
+        // VIEWERS JOINING: Allow authenticated users to add themselves to participants array
+        // This fixes the "chicken and egg" problem where users need permission to add themselves
+        (
+          // User is adding/updating themselves in participants array
+          request.resource.data.participants != null &&
+          resource.data.participants != null &&
+          
+          // User's ID must be in the new participants array (check if any participant has their ID)
+          request.resource.data.participants.hasAny([{'id': request.auth.uid}]) &&
+          
+          // Cannot remove other participants (only add self or update self)
+          request.resource.data.participants.size() >= resource.data.participants.size() &&
+          
+          // Cannot modify critical fields (host, isActive, title)
+          request.resource.data.hostId == resource.data.hostId &&
+          request.resource.data.isActive == resource.data.isActive &&
+          request.resource.data.title == resource.data.title &&
+          
+          // Stream must be active to join
+          resource.data.isActive == true
         )
       ) ||
 
