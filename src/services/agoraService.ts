@@ -180,11 +180,14 @@ class AgoraService {
       console.log('🔄 Setting channel profile to LiveBroadcasting, numeric value:', channelProfileValue);
       try {
         const profileResult = await this.rtcEngine.setChannelProfile(channelProfileValue);
-        // Return value 0 means success, even if outdata shows -7 (ERR_NOT_READY) warning
-        if (profileResult !== 0) {
-          console.warn('⚠️ setChannelProfile returned non-zero result:', profileResult);
+        // -7 (ERR_NOT_READY) is non-critical - engine may not be fully ready yet but will be when joining
+        // Native log shows result 0 (success), JS wrapper returns -7 from outdata, but this is OK
+        if (profileResult === 0) {
+          console.log('✅ Channel profile set successfully');
+        } else if (profileResult === -7) {
+          console.log('ℹ️ Channel profile set (engine not fully ready yet, will be ready when joining)');
         } else {
-          console.log('✅ Channel profile set successfully (return value: 0)');
+          console.warn('⚠️ setChannelProfile returned unexpected result:', profileResult);
         }
       } catch (error) {
         console.error('❌ Error setting channel profile:', error);
@@ -210,11 +213,14 @@ class AgoraService {
       console.log('🔄 Setting audio profile:', { profile: audioProfileValue, scenario: audioScenarioValue });
       try {
         const audioResult = await this.rtcEngine.setAudioProfile(audioProfileValue, audioScenarioValue);
-        // Return value 0 means success, even if outdata shows -7 (ERR_NOT_READY) warning
-        if (audioResult !== 0) {
-          console.warn('⚠️ setAudioProfile returned non-zero result:', audioResult);
+        // -7 (ERR_NOT_READY) is non-critical - engine may not be fully ready yet but will be when joining
+        // Native log shows result 0 (success), JS wrapper returns -7 from outdata, but this is OK
+        if (audioResult === 0) {
+          console.log('✅ Audio profile set successfully');
+        } else if (audioResult === -7) {
+          console.log('ℹ️ Audio profile set (engine not fully ready yet, will be ready when joining)');
         } else {
-          console.log('✅ Audio profile set successfully (return value: 0)');
+          console.warn('⚠️ setAudioProfile returned unexpected result:', audioResult);
         }
       } catch (error) {
         console.error('❌ Error setting audio profile:', error);
@@ -519,12 +525,14 @@ class AgoraService {
       }
       console.log(`🔄 Setting client role to ${isHost ? 'Broadcaster' : 'Audience'}, numeric value:`, clientRole);
       const roleResult = await this.rtcEngine.setClientRole(clientRole);
-      // Return value 0 means success, even if outdata shows -7 (ERR_NOT_READY) warning
-      // The -7 warning in outdata is often non-critical and the engine will be ready when joining
-      if (roleResult !== 0) {
-        console.warn('⚠️ setClientRole returned non-zero result:', roleResult);
+      // -7 (ERR_NOT_READY) is non-critical - engine may not be fully ready yet but will be when joining
+      // Native log shows result 0 (success), JS wrapper returns -7 from outdata, but this is OK
+      if (roleResult === 0) {
+        console.log('✅ Client role set successfully');
+      } else if (roleResult === -7) {
+        console.log('ℹ️ Client role set (engine not fully ready yet, will be ready when joining)');
       } else {
-        console.log('✅ Client role set successfully (return value: 0)');
+        console.warn('⚠️ setClientRole returned unexpected result:', roleResult);
       }
       
       // For audience members, ensure remote audio subscription is enabled

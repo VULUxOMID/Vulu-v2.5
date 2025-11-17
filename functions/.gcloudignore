@@ -1,0 +1,36 @@
+# Exclude iOS build artifacts and native code
+ios/
+*.xcodeproj/
+*.xcworkspace/
+Pods/
+*.podspec
+
+# Exclude build outputs
+build/
+*.framework/
+*.xcframework/
+
+# Exclude development files
+*.swift
+*.m
+*.mm
+*.h
+*.plist
+*.storyboard
+*.xib
+*.entitlements
+*.xcprivacy
+
+# Exclude node_modules (should already be excluded, but just in case)
+node_modules/
+
+# Exclude source maps
+*.map
+
+# Exclude backup files
+*.backup
+*.disabled
+
+# Exclude app.json (not needed for functions)
+app.json
+

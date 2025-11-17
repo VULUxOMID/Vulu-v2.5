@@ -3,12 +3,20 @@ import * as admin from 'firebase-admin';
 // Initialize Firebase Admin
 admin.initializeApp();
 
-// Import event management functions ONLY (to avoid compilation errors in other modules)
+// Import event management functions
 import {
   enterEvent,
   manageEventCycles,
   getServerTime
 } from './events';
+
+// Import Agora token management functions
+import {
+  generateAgoraToken,
+  renewAgoraToken,
+  validateAgoraToken,
+  cleanupExpiredTokens
+} from './agoraTokenManagement';
 
 // Export event functions
 export {
@@ -17,5 +25,10 @@ export {
   getServerTime
 };
 
-// Temporarily disabled other functions to fix compilation errors
-// TODO: Re-enable after fixing TypeScript errors in other modules
+// Export Agora token functions
+export {
+  generateAgoraToken,
+  renewAgoraToken,
+  validateAgoraToken,
+  cleanupExpiredTokens
+};

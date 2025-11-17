@@ -1,0 +1,15 @@
+{
+  "functions": {
+    "ignore": [
+      "ios/**",
+      "node_modules/**",
+      "**/*.xcodeproj/**",
+      "**/*.xcworkspace/**",
+      "**/Pods/**",
+      "**/*.framework/**",
+      "**/*.xcframework/**",
+      "app.json"
+    ]
+  }
+}
+
