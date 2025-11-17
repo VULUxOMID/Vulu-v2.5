@@ -82,6 +82,7 @@ class AgoraService {
   private streamState: AgoraStreamState;
   private config = getAgoraConfig();
   private eventCallbacks: AgoraEventCallbacks = {};
+  private joinChannelPromise: { resolve: (value: boolean) => void; reject: (error: any) => void; timeout: NodeJS.Timeout } | null = null;
   private currentToken: string | null = null;
   private tokenExpiresAt: number = 0;
   private isUsingMockService = isUsingMockAgora();
@@ -155,8 +156,11 @@ class AgoraService {
         console.log('✅ Engine created with string appId');
       }
 
-      // Small delay to ensure engine is fully ready (some APIs may return -7 ERR_NOT_READY immediately after creation)
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for engine to be fully ready (some APIs may return -7 ERR_NOT_READY immediately after creation)
+      // The engine needs time to initialize - 1 second should be sufficient
+      console.log('⏳ Waiting for engine to be ready...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('✅ Engine ready delay completed');
 
       // Debug: Log available methods and enum values
       console.log('🔍 Engine methods:', Object.keys(this.rtcEngine).filter(k => typeof this.rtcEngine[k] === 'function').slice(0, 10).join(', '));
@@ -231,6 +235,9 @@ class AgoraService {
 
       // Setup event listeners
       this.setupEventListeners();
+      
+      // Wait a bit more after setting up listeners to ensure they're registered
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       this.streamState.isConnected = true;
       console.log('✅ Agora RTC Engine initialized successfully');
@@ -290,6 +297,13 @@ class AgoraService {
       this.streamState.channelName = channel;
       this.streamState.localUid = uid;
       
+      // Resolve the join promise if it exists
+      if (this.joinChannelPromise) {
+        clearTimeout(this.joinChannelPromise.timeout);
+        this.joinChannelPromise.resolve(true);
+        this.joinChannelPromise = null;
+      }
+      
       // Use the stored isHost flag (set during joinChannel)
       const isHost = this.currentIsHost;
       
@@ -332,6 +346,17 @@ class AgoraService {
     // Error handling
     this.rtcEngine.addListener('Error', (errorCode: ErrorCode) => {
       console.error(`❌ Agora Error: ${errorCode}`);
+      
+      // If we're waiting for a join and get an error, reject the promise
+      // Some error codes indicate join failure (e.g., -5 = ERR_REFUSED, -17 = ERR_JOIN_CHANNEL_REJECTED)
+      if (this.joinChannelPromise && (errorCode === -5 || errorCode === -17 || errorCode < 0)) {
+        const errorMsg = `Join channel failed with error code: ${errorCode}`;
+        console.error(`❌ ${errorMsg}`);
+        clearTimeout(this.joinChannelPromise.timeout);
+        this.joinChannelPromise.reject(new Error(errorMsg));
+        this.joinChannelPromise = null;
+      }
+      
       this.eventCallbacks.onError?.(errorCode);
     });
 
@@ -452,6 +477,83 @@ class AgoraService {
   }
 
   /**
+   * Internal method to attempt joining a channel with retries
+   * Returns the result code from joinChannel call
+   */
+  private async attemptJoinChannel(token: string, channelName: string, uid: number): Promise<number> {
+    const maxRetries = 5;
+    let retryCount = 0;
+    
+    while (retryCount < maxRetries) {
+      try {
+        // New API: joinChannel(token, channelId, uid)
+        const joinResult = await this.rtcEngine.joinChannel(token, channelName, uid);
+        console.log(`✅ Joining channel initiated (new API): ${channelName} with UID: ${uid}, result: ${joinResult}`);
+        
+        // Check result code
+        if (joinResult === 0) {
+          // Success - join initiated
+          return 0;
+        } else if (joinResult === -7) {
+          // ERR_NOT_READY - engine not ready yet, wait and retry
+          retryCount++;
+          if (retryCount < maxRetries) {
+            // Exponential backoff: 500ms, 1000ms, 1500ms, 2000ms, 2500ms
+            const waitTime = retryCount * 500;
+            console.log(`⏳ Engine not ready (ERR_NOT_READY), waiting ${waitTime}ms before retry ${retryCount}/${maxRetries}...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue; // Retry
+          } else {
+            // Max retries reached - try old API as last resort
+            console.log('⚠️ Max retries reached, trying old API format as last resort...');
+            try {
+              const oldResult = await this.rtcEngine.joinChannel(token, channelName, '', uid);
+              console.log(`✅ Joining channel initiated (old API fallback): ${channelName} with UID: ${uid}, result: ${oldResult}`);
+              return oldResult;
+            } catch (oldError: any) {
+              console.error('❌ Old API also failed:', oldError);
+              return -7; // Return -7 to let the callback mechanism handle it
+            }
+          }
+        } else if (joinResult === -2) {
+          // ERR_INVALID_ARGUMENT - try old API format
+          console.log('⚠️ New API returned ERR_INVALID_ARGUMENT, trying old API format...');
+          try {
+            const oldResult = await this.rtcEngine.joinChannel(token, channelName, '', uid);
+            console.log(`✅ Joining channel initiated (old API): ${channelName} with UID: ${uid}, result: ${oldResult}`);
+            return oldResult;
+          } catch (oldError: any) {
+            console.error('❌ Old API also failed:', oldError);
+            throw new Error(`Invalid arguments to joinChannel: result=${joinResult}`);
+          }
+        } else {
+          // Other error
+          console.warn(`⚠️ joinChannel returned unexpected result: ${joinResult}`);
+          throw new Error(`joinChannel failed with result: ${joinResult}`);
+        }
+      } catch (error: any) {
+        // If it's not a retryable error, throw immediately
+        if (error.message && error.message.includes('Invalid arguments')) {
+          throw error;
+        }
+        // For other errors, try old API as fallback
+        console.log('⚠️ New API failed, trying old API format...');
+        try {
+          const oldResult = await this.rtcEngine.joinChannel(token, channelName, '', uid);
+          console.log(`✅ Joining channel initiated (old API): ${channelName} with UID: ${uid}, result: ${oldResult}`);
+          return oldResult;
+        } catch (oldError: any) {
+          console.error('❌ Both API formats failed:', { newError: error, oldError });
+          throw oldError;
+        }
+      }
+    }
+    
+    // Should never reach here, but return -7 if we do
+    return -7;
+  }
+
+  /**
    * Join a streaming channel with secure token authentication
    */
   async joinChannel(
@@ -503,7 +605,7 @@ class AgoraService {
         this.streamState.isJoined = true;
         this.streamState.channelName = channelName;
         this.streamState.localUid = uid;
-        return true;
+        return true; // Mock service completes synchronously
       }
 
       // Set client role for real Agora SDK
@@ -562,76 +664,56 @@ class AgoraService {
       // Join the channel
       // In v4.5.3+, the API signature changed
       // Try new API: joinChannel(token, channelId, uid) - 3 parameters
-      let joinResult: number;
-      const maxRetries = 3;
-      let retryCount = 0;
       
-      while (retryCount < maxRetries) {
-        try {
-          // New API: joinChannel(token, channelId, uid)
-          joinResult = await this.rtcEngine.joinChannel(token, channelName, uid);
-          console.log(`✅ Joining channel initiated (new API): ${channelName} with UID: ${uid}, result: ${joinResult}`);
-          
-          // Check result code
-          if (joinResult === 0) {
-            // Success - join initiated
-            return true;
-          } else if (joinResult === -7) {
-            // ERR_NOT_READY - engine not ready yet, wait and retry
-            retryCount++;
-            if (retryCount < maxRetries) {
-              const waitTime = retryCount * 200; // 200ms, 400ms, 600ms
-              console.log(`⏳ Engine not ready (ERR_NOT_READY), waiting ${waitTime}ms before retry ${retryCount}/${maxRetries}...`);
-              await new Promise(resolve => setTimeout(resolve, waitTime));
-              continue; // Retry
+      // Wait additional time before attempting to join (engine may need more time after configuration)
+      console.log('⏳ Waiting before join attempt to ensure engine is ready...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Create a promise that will resolve when JoinChannelSuccess callback fires
+      return new Promise<boolean>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          if (this.joinChannelPromise) {
+            this.joinChannelPromise = null;
+          }
+          console.error('❌ Join channel timeout - JoinChannelSuccess callback did not fire within 10 seconds');
+          reject(new Error('Join channel timeout - callback did not fire'));
+        }, 10000); // 10 second timeout
+        
+        this.joinChannelPromise = { resolve, reject, timeout };
+        
+        // Now attempt to join
+        this.attemptJoinChannel(token, channelName, uid)
+          .then((joinResult) => {
+            // If joinResult is 0, the join was initiated successfully
+            // We'll wait for the JoinChannelSuccess callback to resolve the promise
+            if (joinResult === 0) {
+              console.log('✅ Join channel call succeeded (result: 0) - waiting for JoinChannelSuccess callback...');
+              // Don't resolve here - wait for callback
+            } else if (joinResult === -7) {
+              // ERR_NOT_READY - the join might still succeed, wait for callback
+              console.log('⚠️ Join returned -7 (ERR_NOT_READY) - waiting for JoinChannelSuccess callback anyway...');
+              // Don't resolve here - wait for callback (it might still fire)
             } else {
-              // Max retries reached, but -7 is non-critical - the engine should be ready soon
-              console.log('ℹ️ Max retries reached for ERR_NOT_READY, but continuing - engine should be ready soon');
-              return true; // Continue anyway - the join will complete when engine is ready
+              // Other error - reject immediately
+              clearTimeout(timeout);
+              this.joinChannelPromise = null;
+              reject(new Error(`joinChannel failed with result: ${joinResult}`));
             }
-          } else if (joinResult === -2) {
-            // ERR_INVALID_ARGUMENT - try old API format
-            console.log('⚠️ New API returned ERR_INVALID_ARGUMENT, trying old API format...');
-            try {
-              // Old API: joinChannel(token, channelId, info, uid) - 4 parameters
-              joinResult = await this.rtcEngine.joinChannel(token, channelName, '', uid);
-              console.log(`✅ Joining channel initiated (old API): ${channelName} with UID: ${uid}, result: ${joinResult}`);
-              if (joinResult === 0 || joinResult === -7) {
-                return true; // Success or not ready (will complete later)
-              }
-            } catch (oldError: any) {
-              console.error('❌ Old API also failed:', oldError);
-            }
-            throw new Error(`Invalid arguments to joinChannel: result=${joinResult}`);
-          } else {
-            // Other error
-            console.warn(`⚠️ joinChannel returned unexpected result: ${joinResult}`);
-            throw new Error(`joinChannel failed with result: ${joinResult}`);
-          }
-        } catch (error: any) {
-          // If it's not a retryable error, throw immediately
-          if (error.message && error.message.includes('Invalid arguments')) {
-            throw error;
-          }
-          // For other errors, try old API as fallback
-          console.log('⚠️ New API failed, trying old API format...');
-          try {
-            joinResult = await this.rtcEngine.joinChannel(token, channelName, '', uid);
-            console.log(`✅ Joining channel initiated (old API): ${channelName} with UID: ${uid}, result: ${joinResult}`);
-            if (joinResult === 0 || joinResult === -7) {
-              return true; // Success or not ready (will complete later)
-            }
-          } catch (oldError: any) {
-            console.error('❌ Both API formats failed:', { newError: error, oldError });
-            throw oldError;
-          }
-        }
-      }
-
-      return true;
+          })
+          .catch((error) => {
+            clearTimeout(timeout);
+            this.joinChannelPromise = null;
+            reject(error);
+          });
+      });
 
     } catch (error: any) {
       console.error('❌ Failed to join channel:', error);
+      // Clean up promise if it exists
+      if (this.joinChannelPromise) {
+        clearTimeout(this.joinChannelPromise.timeout);
+        this.joinChannelPromise = null;
+      }
       return false;
     }
   }
