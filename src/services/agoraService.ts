@@ -581,240 +581,112 @@ class AgoraService {
   }
 
   /**
-   * Internal method to attempt joining a channel with retries
-   * Returns the result code from joinChannel call
+   * Simplified: Attempt to join channel (no retries, just try once)
    */
   private async attemptJoinChannel(token: string, channelName: string, uid: number): Promise<number> {
-    const maxRetries = 5;
-    let retryCount = 0;
-    
-    while (retryCount < maxRetries) {
-      try {
-        // New API: joinChannel(token, channelId, uid)
-        const joinResult = await this.rtcEngine.joinChannel(token, channelName, uid);
-        console.log(`✅ Joining channel initiated (new API): ${channelName} with UID: ${uid}, result: ${joinResult}`);
-        
-        // Check result code
-        if (joinResult === 0) {
-          // Success - join initiated
-          return 0;
-        } else if (joinResult === -7) {
-          // ERR_NOT_READY - engine not ready yet, wait and retry
-          retryCount++;
-          if (retryCount < maxRetries) {
-            // Exponential backoff: 500ms, 1000ms, 1500ms, 2000ms, 2500ms
-            const waitTime = retryCount * 500;
-            console.log(`⏳ Engine not ready (ERR_NOT_READY), waiting ${waitTime}ms before retry ${retryCount}/${maxRetries}...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-            continue; // Retry
-          } else {
-            // Max retries reached - even though we got -7, the join might still complete asynchronously
-            // Return -7 to let the callback mechanism handle it (the promise will wait for JoinChannelSuccess)
-            console.log('⚠️ Max retries reached, but -7 might be acceptable - waiting for JoinChannelSuccess callback...');
-            return -7; // Return -7 to let the callback mechanism handle it
-          }
-        } else if (joinResult === -2) {
-          // ERR_INVALID_ARGUMENT - this is a real error, not recoverable
-          console.error('❌ joinChannel returned ERR_INVALID_ARGUMENT - invalid parameters');
-          throw new Error(`Invalid arguments to joinChannel: result=${joinResult}`);
-        } else {
-          // Other error
-          console.warn(`⚠️ joinChannel returned unexpected result: ${joinResult}`);
-          throw new Error(`joinChannel failed with result: ${joinResult}`);
-        }
-      } catch (error: any) {
-        // If it's not a retryable error, throw immediately
-        if (error.message && error.message.includes('Invalid arguments')) {
-          throw error;
-        }
-        // For other errors, rethrow
-        console.error('❌ joinChannel call failed:', error);
-        throw error;
-      }
+    try {
+      const joinResult = await this.rtcEngine.joinChannel(token, channelName, uid);
+      console.log(`🔄 Join channel call result: ${joinResult}`);
+      return joinResult;
+    } catch (error: any) {
+      console.error('❌ joinChannel call failed:', error);
+      throw error;
     }
-    
-    // Should never reach here, but return -7 if we do
-    return -7;
   }
 
   /**
-   * Join a streaming channel with secure token authentication
+   * Simplified: Join a streaming channel
+   * No complex retries, timeouts, or validations - just join
    */
   async joinChannel(
     channelName: string,
     userId: string,
     isHost: boolean = false,
-    providedToken?: string,
-    validateAccess: boolean = true
+    providedToken?: string
   ): Promise<boolean> {
     try {
-      // Validate stream access if requested (skip for hosts, they already have access)
-      if (validateAccess && !isHost) {
-        const hasAccess = await this.validateStreamAccess(channelName);
-        if (!hasAccess) {
-          // validateStreamAccess already allows access in dev mode, so if we get here in production, deny
-          if (__DEV__) {
-            // This shouldn't happen since validateStreamAccess allows in dev mode, but just in case
-            console.warn('⚠️ Stream access validation returned false in dev mode - this is unexpected, but continuing anyway');
-            // Continue anyway in dev mode
-          } else {
-            console.error('❌ Stream access denied');
-            return false;
-          }
+      // Initialize if needed
+      if (!this.streamState.isConnected) {
+        const initialized = await this.initialize();
+        if (!initialized) {
+          throw new Error('Failed to initialize Agora engine');
         }
       }
 
-      if (!this.streamState.isConnected) {
-        const initialized = await this.initialize();
-        if (!initialized) return false;
-      }
-
       if (!this.rtcEngine) {
-        console.error('❌ RTC Engine not initialized');
-        return false;
+        throw new Error('RTC Engine not initialized');
       }
 
       console.log(`🔄 Joining channel: ${channelName} as ${isHost ? 'host' : 'audience'}`);
 
-      // Store isHost flag for use in join success callback
+      // Store isHost flag
       this.currentIsHost = isHost;
 
-      // Generate UID from userId (consistent hash)
+      // Generate UID from userId
       const uid = this.generateUidFromUserId(userId);
 
-      // Handle mock service differently
+      // Handle mock service
       if (this.isUsingMockService) {
         console.log('🎭 Using mock service to join channel');
         await this.rtcEngine.joinChannel('mock-token', channelName, uid, isHost);
         this.streamState.isJoined = true;
         this.streamState.channelName = channelName;
         this.streamState.localUid = uid;
-        return true; // Mock service completes synchronously
+        return true;
       }
 
-      // Set client role for real Agora SDK
-      // Use numeric values: Broadcaster = 1, Audience = 2
-      // From Agora SDK: ClientRoleBroadcaster = 1, ClientRoleAudience = 2
-      let clientRole: number;
-      if (isHost) {
-        clientRole = typeof ClientRole?.ClientRoleBroadcaster === 'number'
-          ? ClientRole.ClientRoleBroadcaster
-          : (typeof ClientRole?.Broadcaster === 'number'
-            ? ClientRole.Broadcaster
-            : 1); // Default to 1 (Broadcaster)
-      } else {
-        clientRole = typeof ClientRole?.ClientRoleAudience === 'number'
-          ? ClientRole.ClientRoleAudience
-          : (typeof ClientRole?.Audience === 'number'
-            ? ClientRole.Audience
-            : 2); // Default to 2 (Audience)
-      }
-      console.log(`🔄 Setting client role to ${isHost ? 'Broadcaster' : 'Audience'}, numeric value:`, clientRole);
-      const roleResult = await this.rtcEngine.setClientRole(clientRole);
-      // -7 (ERR_NOT_READY) is non-critical - engine may not be fully ready yet but will be when joining
-      // Native log shows result 0 (success), JS wrapper returns -7 from outdata, but this is OK
-      if (roleResult === 0) {
-        console.log('✅ Client role set successfully');
-      } else if (roleResult === -7) {
-        console.log('ℹ️ Client role set (engine not fully ready yet, will be ready when joining)');
-      } else {
-        console.warn('⚠️ setClientRole returned unexpected result:', roleResult);
-      }
-      
-      // For audience members, ensure remote audio subscription is enabled
-      // (In Live Broadcasting mode, this should be automatic, but we ensure it)
+      // Set client role
+      const clientRole = isHost ? 1 : 2; // 1 = Broadcaster, 2 = Audience
+      await this.rtcEngine.setClientRole(clientRole);
+      console.log(`✅ Client role set: ${isHost ? 'Broadcaster' : 'Audience'}`);
+
+      // For audience, ensure remote audio is enabled
       if (!isHost) {
         try {
           if (typeof this.rtcEngine.muteAllRemoteAudioStreams === 'function') {
             await this.rtcEngine.muteAllRemoteAudioStreams(false);
-            console.log('✅ Ensured remote audio subscription enabled for audience member');
           }
         } catch (error) {
-          console.warn('⚠️ Failed to ensure remote audio subscription:', error);
+          console.warn('⚠️ Failed to enable remote audio:', error);
         }
       }
 
-      // Generate or use provided token
+      // Get token
       let token = providedToken;
       if (!token || this.needsTokenRenewal()) {
-        const tokenData = await this.generateToken(
-          channelName,
-          uid,
-          isHost ? 'host' : 'audience'
-        );
+        const tokenData = await this.generateToken(channelName, uid, isHost ? 'host' : 'audience');
         token = tokenData.token;
       }
 
-      // Join the channel
-      // In v4.5.3+, the API signature changed
-      // Try new API: joinChannel(token, channelId, uid) - 3 parameters
-      
-      // Verify engine is ready before attempting to join
-      // Poll getConnectionState until it doesn't return -7
-      console.log('⏳ Verifying engine is ready before join...');
-      let readyCheckAttempts = 0;
-      const maxReadyCheckAttempts = 15; // 15 attempts * 300ms = 4.5 seconds max
-      while (readyCheckAttempts < maxReadyCheckAttempts) {
-        try {
-          const stateResult = await this.rtcEngine.getConnectionState();
-          if (stateResult !== -7 && stateResult !== undefined && stateResult !== null) {
-            console.log('✅ Engine verified ready for join (getConnectionState returned:', stateResult, ')');
-            break;
-          }
-        } catch (error) {
-          // Ignore errors, continue polling
-        }
-        
-        readyCheckAttempts++;
-        if (readyCheckAttempts < maxReadyCheckAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-      }
-      
-      if (readyCheckAttempts >= maxReadyCheckAttempts) {
-        console.warn('⚠️ Engine readiness verification timed out, but attempting join anyway');
-      } else {
-        console.log(`✅ Engine ready after ${readyCheckAttempts * 300}ms`);
-      }
-      
-      // Store channel name and UID before creating promise (for fallback detection)
-      // This allows ConnectionStateChanged fallback to access them
+      // Store channel info
       this.streamState.channelName = channelName;
       this.streamState.localUid = uid;
-      
-      // Create a promise that will resolve when JoinChannelSuccess callback fires
+
+      // Join channel - simple promise with 5 second timeout
       return new Promise<boolean>((resolve, reject) => {
         const timeout = setTimeout(() => {
           if (this.joinChannelPromise) {
             this.joinChannelPromise = null;
           }
-          console.error('❌ Join channel timeout - JoinChannelSuccess callback did not fire within 15 seconds');
-          console.error('❌ This usually means the event listener is not firing. Check ConnectionStateChanged events.');
-          reject(new Error('Join channel timeout - callback did not fire within 15 seconds'));
-        }, 15000); // 15 second timeout (increased to allow more time for engine to become ready)
-        
+          reject(new Error('Join channel timeout'));
+        }, 5000); // 5 second timeout (simplified from 15)
+
         this.joinChannelPromise = { resolve, reject, timeout };
-        
-        // Now attempt to join
+
+        // Attempt join
         this.attemptJoinChannel(token, channelName, uid)
-            .then((joinResult) => {
-              // If joinResult is 0 or -7, the join might succeed asynchronously
-              // We'll wait for the JoinChannelSuccess callback to resolve the promise
-              if (joinResult === 0) {
-                console.log('✅ Join channel call succeeded (result: 0) - waiting for JoinChannelSuccess callback...');
-                // Don't resolve here - wait for callback
-              } else if (joinResult === -7) {
-                // ERR_NOT_READY - the join might still succeed asynchronously, wait for callback
-                console.log('⚠️ Join returned -7 (ERR_NOT_READY) - waiting for JoinChannelSuccess callback (join may complete asynchronously)...');
-                // Don't resolve here - wait for callback (it might still fire)
-                // Note: -7 might mean the engine needs more time, but the join could still complete
-              } else {
-                // Other error - reject immediately
-                clearTimeout(timeout);
-                this.joinChannelPromise = null;
-                reject(new Error(`joinChannel failed with result: ${joinResult}`));
-              }
-            })
+          .then((joinResult) => {
+            if (joinResult === 0 || joinResult === -7) {
+              // 0 = success, -7 = not ready but might still work
+              // Wait for callback
+              console.log(`⏳ Join initiated (result: ${joinResult}), waiting for callback...`);
+            } else {
+              // Other error - fail immediately
+              clearTimeout(timeout);
+              this.joinChannelPromise = null;
+              reject(new Error(`Join failed with code: ${joinResult}`));
+            }
+          })
           .catch((error) => {
             clearTimeout(timeout);
             this.joinChannelPromise = null;
@@ -824,12 +696,11 @@ class AgoraService {
 
     } catch (error: any) {
       console.error('❌ Failed to join channel:', error);
-      // Clean up promise if it exists
       if (this.joinChannelPromise) {
         clearTimeout(this.joinChannelPromise.timeout);
         this.joinChannelPromise = null;
       }
-      return false;
+      throw error; // Throw instead of returning false
     }
   }
 

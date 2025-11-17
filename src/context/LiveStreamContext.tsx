@@ -1,12 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { Alert, AppState } from 'react-native';
-import { streamingService } from '../services/streamingService';
-import { StreamSyncValidator } from '../services/streamSyncValidator';
-import { StreamCleanupService } from '../services/streamCleanupService';
-import { StreamValidator } from '../services/streamValidator';
-import { PlatformUtils } from '../utils/platformUtils';
-import { ActiveStreamTracker } from '../services/activeStreamTracker';
-import { FirestoreErrorRecovery } from '../utils/firestoreErrorRecovery';
+import { streamService } from '../services/streamService';
 import { useAuthSafe } from './AuthContext';
 
 // Define the structure of a stream
@@ -104,94 +98,12 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
     if (user && !authLoading) {
       console.log(`🔄 Initializing sync validation for user ${user.uid}`);
 
-      // Start sync validation
-      StreamSyncValidator.startSyncValidation(user.uid, currentlyWatching);
-
-      // Clean up user's orphaned records
-      StreamCleanupService.cleanupUserOrphanedRecords(user.uid);
-
-      // Start Firestore error monitoring (only if platform supports it)
-      try {
-        FirestoreErrorRecovery.startErrorMonitoring(user.uid);
-      } catch (error) {
-        console.warn('⚠️ Could not start Firestore error monitoring:', error);
-      }
-
-      // Test Firebase permissions for debugging
-      ActiveStreamTracker.testPermissions(user.uid).then(result => {
-        if (!result.canRead || !result.canWrite) {
-          console.warn('⚠️ Firebase permission issues detected:', result);
-          console.warn('   This may cause stream tracking to fail.');
-          console.warn('   Please check Firestore security rules.');
-        } else {
-          console.log('✅ Firebase permissions verified for activeStream access');
-        }
-      }).catch(error => {
-        console.error('❌ Permission test failed:', error);
-
-        // Check if this is a Firestore internal error
-        if (FirestoreErrorRecovery.isFirestoreInternalError(error)) {
-          FirestoreErrorRecovery.handleFirestoreError(error, 'permission_test', user.uid);
-        }
-      });
-
-      // Listen for state correction events using platform-safe event emitter
-      const handleStateCorrection = (eventData: any) => {
-        const { userId, correctedStreamId, reason } = eventData;
-
-        if (userId === user.uid) {
-          console.log(`📢 Received state correction: ${reason}, corrected stream: ${correctedStreamId}`);
-
-          // Update local state to match corrected state
-          setCurrentlyWatching(correctedStreamId);
-          setIsMinimized(false);
-
-          // Show user notification if needed
-          if (reason === 'conflict_server_wins') {
-            Alert.alert(
-              'Stream State Updated',
-              'Your stream state was synchronized with the server.',
-              [{ text: 'OK' }]
-            );
-          }
-        }
-      };
-
-      // Use platform-safe event emitter for cross-component communication
-      let eventSubscription: any = null;
-
-      try {
-        const eventEmitter = PlatformUtils.getEventEmitter();
-        eventSubscription = eventEmitter.addListener('streamStateCorrection', handleStateCorrection);
-      } catch (error) {
-        console.warn('⚠️ Could not set up event listener for state corrections:', error);
-      }
-
-      return () => {
-        // Cleanup sync validation when user changes
-        StreamSyncValidator.stopSyncValidation(user.uid);
-
-        // Remove event listener safely
-        try {
-          if (eventSubscription && eventSubscription.remove) {
-            eventSubscription.remove();
-          }
-        } catch (error) {
-          console.warn('⚠️ Error removing event listener:', error);
-        }
-      };
+      // Simplified: No complex sync validation needed
+      console.log('✅ User authenticated, ready for streaming');
     }
   }, [user, authLoading]);
 
-  // Update sync validation when currentlyWatching changes (but not on initial load)
-  useEffect(() => {
-    if (user && !authLoading && currentlyWatching !== null) {
-      // Only restart if we have an active listener and the stream ID changed
-      console.log(`🔄 Updating sync validation for stream change: ${currentlyWatching}`);
-      StreamSyncValidator.stopSyncValidation(user.uid);
-      StreamSyncValidator.startSyncValidation(user.uid, currentlyWatching);
-    }
-  }, [currentlyWatching]); // Remove user and authLoading dependencies to prevent duplicate listeners
+  // Simplified: No sync validation needed
 
   // Fetch streams from Firebase - wait for auth to complete
   useEffect(() => {
@@ -202,28 +114,45 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
 
     const fetchStreams = async () => {
       try {
-        const activeStreams = await streamingService.getActiveStreams();
-        setStreams(activeStreams);
+        const activeStreams = await streamService.getActiveStreams();
+        // Convert Stream[] to LiveStream[] format
+        const liveStreams: LiveStream[] = activeStreams.map(stream => ({
+          id: stream.id,
+          title: stream.title,
+          hosts: stream.participants
+            .filter(p => p.isHost)
+            .map(p => ({
+              name: p.name,
+              avatar: p.avatar || '',
+              joinOrder: 0,
+              isSpeaking: false,
+              isMuted: p.isMuted
+            })),
+          viewers: stream.participants
+            .filter(p => !p.isHost)
+            .map(p => ({
+              name: p.name,
+              avatar: p.avatar || '',
+              isMuted: p.isMuted,
+              isBanned: p.isBanned
+            })),
+          views: stream.viewerCount,
+          isActive: stream.isActive,
+          startedAt: stream.startedAt.toMillis()
+        }));
+        setStreams(liveStreams);
       } catch (error) {
         console.error('Error fetching streams:', error);
-        // Fallback to empty array if Firebase fails
         setStreams([]);
       }
     };
 
     fetchStreams();
 
-    // Set up real-time listener for stream updates
-    const unsubscribe = streamingService.onActiveStreamsUpdate((updatedStreams) => {
-      console.log(`🔄 [CONTEXT] Received ${updatedStreams.length} streams from streaming service`);
-      updatedStreams.forEach((stream, index) => {
-        console.log(`📊 [CONTEXT] Stream ${index + 1}: ${stream.id} - ${stream.hosts.length} hosts, ${stream.viewers.length} viewers`);
-      });
-      setStreams(updatedStreams);
-      console.log(`✅ [CONTEXT] Updated UI with ${updatedStreams.length} streams`);
-    });
+    // Simple polling for updates (can be replaced with Firestore listener later)
+    const interval = setInterval(fetchStreams, 5000); // Poll every 5 seconds
 
-    return unsubscribe;
+    return () => clearInterval(interval);
   }, [authLoading]); // Depend on authLoading to wait for auth completion
 
   // Handle app state changes for cleanup and Firestore error recovery
@@ -234,20 +163,7 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
       if (nextAppState === 'background') {
         console.log('📱 App going to background - cleaning up resources');
 
-        // Emergency cleanup to prevent Firestore listener issues
-        StreamSyncValidator.emergencyCleanup();
-
-        // App is going to background, perform cleanup if user is in a stream
-        if (currentlyWatching && user?.uid) {
-          console.log('🧹 App going to background, cleaning up stream participation');
-          streamingService.handleAppCrashCleanup(user.uid);
-        }
-      } else if (nextAppState === 'active' && user && !authLoading) {
-        console.log('📱 App becoming active - restarting sync validation');
-        // Restart sync validation when app becomes active
-        setTimeout(() => {
-          StreamSyncValidator.startSyncValidation(user.uid, currentlyWatching);
-        }, 1000); // Small delay to ensure app is fully active
+        // Simplified: No special cleanup needed
       }
     };
 
@@ -354,120 +270,53 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
     });
   };
 
+  // Simplified: Join a stream
   const joinStream = async (streamId: string, skipConfirmation: boolean = false) => {
-    return executeAtomicOperation(`joinStream(${streamId})`, async () => {
-      // Validate sync before operation
-      if (user) {
-        const syncValidation = await StreamSyncValidator.validateSyncBeforeOperation(
-          user.uid,
-          currentlyWatching,
-          'join'
-        );
+    if (!user) {
+      throw new Error('User must be authenticated to join a stream');
+    }
 
-        if (!syncValidation.valid) {
-          console.log(`🔧 Sync corrected before join operation: ${syncValidation.correctedStreamId}`);
-          setCurrentlyWatching(syncValidation.correctedStreamId || null);
-        }
+    // Check if already in this stream
+    if (currentlyWatching === streamId) {
+      console.log('Already in this stream');
+      return;
+    }
+
+    // Check if in another stream - ask for confirmation
+    if (hasActiveStream() && currentlyWatching !== streamId && !skipConfirmation) {
+      const shouldProceed = await showJoinStreamConfirmation(streamId);
+      if (!shouldProceed) {
+        throw new Error('User cancelled stream join');
       }
 
-      // Check if user is already in a stream and needs confirmation
-      if (hasActiveStream() && currentlyWatching !== streamId && !skipConfirmation) {
-        const shouldProceed = await showJoinStreamConfirmation(streamId);
-        if (!shouldProceed) {
-          throw new Error('User cancelled stream join');
+      // Leave current stream
+      if (currentlyWatching) {
+        try {
+          await streamService.leaveStream(currentlyWatching, user.uid);
+        } catch (error) {
+          console.warn('Error leaving previous stream:', error);
         }
       }
+    }
 
-      // Validate target stream before proceeding
-      const streamValidation = await StreamValidator.validateStreamForOperation(
+    try {
+      // Join the stream
+      await streamService.joinStream(
         streamId,
-        'join',
-        user?.uid
+        user.uid,
+        user.displayName || user.username || 'User',
+        user.photoURL || user.profileImage || null
       );
 
-      if (!streamValidation.canProceed) {
-        // Handle invalid stream with fallback action
-        const fallback = await StreamValidator.executeFallbackAction(
-          streamValidation.fallbackAction || 'show_error',
-          streamId,
-          user?.uid
-        );
-
-        if (streamValidation.fallbackAction === 'update_local_state') {
-          // User is already in the stream, just update local state
-          setCurrentlyWatching(streamId);
-          setIsMinimized(false);
-          return;
-        }
-
-        throw new Error(fallback.message || 'Cannot join this stream');
-      }
-
-      // Store previous stream for atomic rollback if needed
-      const previousStreamId = currentlyWatching;
-      const previousMinimizedState = isMinimized;
-
-      try {
-        // If user is already watching a stream, leave it first
-        if (currentlyWatching && currentlyWatching !== streamId) {
-          console.log(`🔄 Leaving current stream ${currentlyWatching} before joining ${streamId}`);
-
-          // Use retry logic for leaving stream
-          await StreamValidator.executeWithRetry(
-            () => streamingService.leaveStream(currentlyWatching!, user?.uid || 'guest'),
-            `leaveStream(${currentlyWatching})`
-          );
-
-          console.log(`✅ Successfully left previous stream ${currentlyWatching}`);
-
-          // Clear the current watching state
-          setCurrentlyWatching(null);
-          setIsMinimized(false);
-        }
-
-        // Get current user info from auth context
-        const userId = user?.uid || 'guest';
-        const userName = user?.displayName || user?.username || 'Guest User';
-        const userAvatar = user?.photoURL || user?.profileImage || '';
-
-        console.log(`🔄 Attempting to join stream ${streamId} as ${userName}...`);
-
-        // Join the new stream with retry logic
-        await StreamValidator.executeWithRetry(
-          () => streamingService.joinStream(streamId, userId, userName, userAvatar),
-          `joinStream(${streamId})`
-        );
-
-        // Set the watching state immediately after successful join
-        setCurrentlyWatching(streamId);
-        setIsMinimized(false); // Ensure not minimized when joining new stream
-        console.log(`✅ Successfully joined stream ${streamId} - UI state updated`);
-
-      } catch (error) {
-        console.error('❌ Error in stream join operation:', error);
-
-        // Attempt to rollback to previous state if join failed
-        if (previousStreamId && previousStreamId !== streamId) {
-          console.log(`🔄 Attempting rollback to previous stream ${previousStreamId}`);
-          try {
-            setCurrentlyWatching(previousStreamId);
-            setIsMinimized(previousMinimizedState);
-            console.log(`✅ Rollback successful to stream ${previousStreamId}`);
-          } catch (rollbackError) {
-            console.error('❌ Rollback failed:', rollbackError);
-            // Clear state completely if rollback fails
-            setCurrentlyWatching(null);
-            setIsMinimized(false);
-          }
-        } else {
-          // Clear watching state on error to prevent stuck state
-          setCurrentlyWatching(null);
-          setIsMinimized(false);
-        }
-
-        throw error; // Re-throw to allow UI to handle the error
-      }
-    });
+      // Update UI state
+      setCurrentlyWatching(streamId);
+      setIsMinimized(false);
+      console.log(`✅ Joined stream: ${streamId}`);
+    } catch (error) {
+      console.error('Failed to join stream:', error);
+      setCurrentlyWatching(null);
+      throw error;
+    }
   };
 
   // Add this new function to handle minimizing streams
@@ -478,73 +327,49 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
     }
   };
 
-  // Enhanced function to create a new stream with active stream checking
+  // Simplified: Create a new stream
   const createNewStream = async (title: string, hostId: string, hostName: string, hostAvatar: string, skipConfirmation: boolean = false): Promise<string> => {
-    return executeAtomicOperation(`createNewStream(${title})`, async () => {
-      // Check if user is already in a stream and needs confirmation
-      if (hasActiveStream() && !skipConfirmation) {
-        const shouldProceed = await showCreateStreamConfirmation();
-        if (!shouldProceed) {
-          throw new Error('User cancelled stream creation');
-        }
+    if (!user || user.uid !== hostId) {
+      throw new Error('User must be authenticated to create a stream');
+    }
 
-        // Leave current stream before creating new one
-        if (currentlyWatching) {
-          console.log(`🔄 Leaving current stream ${currentlyWatching} before creating new stream`);
-          try {
-            await streamingService.leaveStream(currentlyWatching, hostId);
-            console.log(`✅ Successfully left previous stream ${currentlyWatching}`);
-          } catch (leaveError) {
-            console.warn(`⚠️ Error leaving previous stream ${currentlyWatching}:`, leaveError);
-            // Continue with creation even if leave failed
-          }
-
-          // Clear the current watching state
-          setCurrentlyWatching(null);
-          setIsMinimized(false);
-        }
+    // Check if already in a stream - ask for confirmation
+    if (hasActiveStream() && !skipConfirmation) {
+      const shouldProceed = await showCreateStreamConfirmation();
+      if (!shouldProceed) {
+        throw new Error('User cancelled stream creation');
       }
 
-      try {
-        // Sanitize parameters to prevent undefined values
-        const sanitizedTitle = title || 'Live Stream';
-        const sanitizedHostName = hostName || 'Host';
-        const sanitizedHostAvatar = hostAvatar || null;
-
-        console.log('🔧 Sanitized stream parameters:', {
-          title: sanitizedTitle,
-          hostId,
-          hostName: sanitizedHostName,
-          hostAvatar: sanitizedHostAvatar
-        });
-
-        // Create the new stream with retry logic
-        const streamId = await StreamValidator.executeWithRetry(
-          () => streamingService.createStream(sanitizedTitle, hostId, sanitizedHostName, sanitizedHostAvatar),
-          `createStream(${sanitizedTitle})`
-        );
-
-        console.log(`✅ Created new stream: ${streamId}`);
-
-        // Validate the created stream with retry logic for race condition
-        const validation = await StreamValidator.validateStreamWithRetry(streamId, 3, 1000);
-        if (!validation.valid) {
-          throw new Error(`Created stream ${streamId} is not valid: ${validation.reason}`);
+      // Leave current stream
+      if (currentlyWatching) {
+        try {
+          await streamService.leaveStream(currentlyWatching, hostId);
+        } catch (error) {
+          console.warn('Error leaving previous stream:', error);
         }
-
-        // Set the new stream as currently watching
-        setCurrentlyWatching(streamId);
-        setIsMinimized(false);
-
-        return streamId;
-      } catch (error) {
-        console.error('❌ Error creating new stream:', error);
-        // Clear state on creation failure
-        setCurrentlyWatching(null);
-        setIsMinimized(false);
-        throw error;
       }
-    });
+    }
+
+    try {
+      // Create the stream
+      const streamId = await streamService.createStream(
+        title || 'Live Stream',
+        hostId,
+        hostName || 'Host',
+        hostAvatar || null
+      );
+
+      // Update UI state
+      setCurrentlyWatching(streamId);
+      setIsMinimized(false);
+      console.log(`✅ Created stream: ${streamId}`);
+
+      return streamId;
+    } catch (error) {
+      console.error('Failed to create stream:', error);
+      setCurrentlyWatching(null);
+      throw error;
+    }
   };
 
   // New functions for enhanced live stream features
@@ -703,138 +528,114 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
     }
   };
 
+  // Simplified: Leave a stream
   const leaveStream = async (streamId: string) => {
+    if (!user) {
+      throw new Error('User must be authenticated');
+    }
+
     try {
-      // Clear UI state immediately to prevent highlighting persistence
-      console.log(`🔄 [CONTEXT] Clearing UI state for stream ${streamId}`);
+      // Clear UI state
       setCurrentlyWatching(null);
       setIsMinimized(false);
 
-      // Then perform the actual leave operation
-      const userId = user?.uid || 'guest';
-      console.log(`🔄 [CONTEXT] Calling streamingService.leaveStream for user ${userId} from stream ${streamId}`);
-      await streamingService.leaveStream(streamId, userId);
-
-      // Additional cleanup to ensure no stale records remain
-      if (userId !== 'guest') {
-        try {
-          await ActiveStreamTracker.cleanupOrphanedStreams(userId);
-        } catch (error) {
-          console.error('❌ [CONTEXT] Failed to run ActiveStreamTracker cleanup:', error);
-          // Continue silently - this is optional cleanup and shouldn't block user flow
-        }
-      }
-
-      console.log(`✅ [CONTEXT] Successfully left stream ${streamId}`);
+      // Leave the stream
+      await streamService.leaveStream(streamId, user.uid);
+      console.log(`✅ Left stream: ${streamId}`);
     } catch (error) {
-      console.error('❌ [CONTEXT] Error leaving stream:', error);
-      // UI state is already cleared above, so highlighting won't persist
-    }
-  };
-
-  const leaveStreamWithConfirmation = async (streamId: string): Promise<void> => {
-    const userId = user?.uid || 'guest';
-
-    try {
-      console.log(`🔍 [CONTEXT] Checking if user ${userId} is host of stream ${streamId}`);
-      const isHost = await streamingService.isUserStreamHost(streamId, userId);
-      console.log(`🔍 [CONTEXT] User ${userId} is host: ${isHost}`);
-
-      if (isHost) {
-        // Show Yubo-style confirmation dialog for hosts
-        return new Promise((resolve, reject) => {
-          Alert.alert(
-            'Leave Live Stream',
-            'Are you sure you want to leave this live?',
-            [
-              {
-                text: 'Cancel',
-                style: 'cancel',
-                onPress: () => {
-                  console.log('🚫 [CONTEXT] Host cancelled leaving stream');
-                  reject(new Error('User cancelled'));
-                }
-              },
-              {
-                text: 'Leave',
-                style: 'destructive',
-                onPress: async () => {
-                  try {
-                    console.log('🔄 [CONTEXT] Host confirmed leaving stream, using lifecycle manager...');
-
-                    // Use lifecycle manager for proper host leave handling
-                    const StreamLifecycleManager = (await import('../utils/streamLifecycleManager')).default;
-                    await StreamLifecycleManager.handleHostLeave(streamId, userId);
-
-                    console.log('✅ [CONTEXT] Host successfully left with lifecycle management');
-                    resolve(undefined);
-                  } catch (error) {
-                    console.error('❌ [CONTEXT] Error during host leave:', error);
-                    reject(error);
-                  }
-                }
-              }
-            ]
-          );
-        });
-      } else {
-        // Regular viewers leave immediately without confirmation
-        console.log('🔄 [CONTEXT] Regular viewer leaving stream without confirmation');
-        await leaveStream(streamId);
-      }
-    } catch (error) {
-      console.error('❌ [CONTEXT] Error in leaveStreamWithConfirmation:', error);
+      console.error('Failed to leave stream:', error);
       throw error;
     }
   };
 
-  // Refresh streams function for manual and automatic updates
-  const refreshStreams = async (): Promise<void> => {
-    if (isRefreshing) {
-      console.log('🔄 [REFRESH] Already refreshing, skipping...');
-      return;
+  // Simplified: Leave with confirmation
+  const leaveStreamWithConfirmation = async (streamId: string): Promise<void> => {
+    if (!user) {
+      throw new Error('User must be authenticated');
     }
+
+    // Get stream to check if user is host
+    const stream = await streamService.getStream(streamId);
+    const isHost = stream?.hostId === user.uid;
+
+    if (isHost) {
+      // Show confirmation for hosts
+      return new Promise((resolve, reject) => {
+        Alert.alert(
+          'Leave Live Stream',
+          'Are you sure you want to leave this live?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => reject(new Error('User cancelled'))
+            },
+            {
+              text: 'Leave',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await leaveStream(streamId);
+                  resolve();
+                } catch (error) {
+                  reject(error);
+                }
+              }
+            }
+          ]
+        );
+      });
+    } else {
+      // Viewers leave immediately
+      await leaveStream(streamId);
+    }
+  };
+
+  // Simplified: Refresh streams
+  const refreshStreams = async (): Promise<void> => {
+    if (isRefreshing) return;
 
     try {
       setIsRefreshing(true);
-      console.log('🔄 [REFRESH] Starting manual stream refresh...');
-
-      // Store current stream count for comparison
-      const previousStreamCount = streams.length;
-      console.log(`📊 [REFRESH] Current stream count: ${previousStreamCount}`);
-
-      // CRITICAL FIX: Force cleanup phantom streams first
-      console.log('🧹 [REFRESH] Running force cleanup of phantom streams...');
-      await streamingService.forceCleanupPhantomStreams();
-
-      // Fetch latest streams from Firebase (this will trigger validation and cleanup)
-      const activeStreams = await streamingService.getActiveStreams();
-
-      console.log(`📊 [REFRESH] Fetched ${activeStreams.length} streams from Firebase after cleanup`);
-
-      // Update refresh timestamp
+      const activeStreams = await streamService.getActiveStreams();
+      
+      // Convert to LiveStream format
+      const liveStreams: LiveStream[] = activeStreams.map(stream => ({
+        id: stream.id,
+        title: stream.title,
+        hosts: stream.participants
+          .filter(p => p.isHost)
+          .map(p => ({
+            name: p.name,
+            avatar: p.avatar || '',
+            joinOrder: 0,
+            isSpeaking: false,
+            isMuted: p.isMuted
+          })),
+        viewers: stream.participants
+          .filter(p => !p.isHost)
+          .map(p => ({
+            name: p.name,
+            avatar: p.avatar || '',
+            isMuted: p.isMuted,
+            isBanned: p.isBanned
+          })),
+        views: stream.viewerCount,
+        isActive: stream.isActive,
+        startedAt: stream.startedAt.toMillis()
+      }));
+      
+      setStreams(liveStreams);
       setLastRefreshTime(new Date());
-
-      // Log the difference (use fetched data for side-effects only)
-      const streamDifference = activeStreams.length - previousStreamCount;
-      if (streamDifference !== 0) {
-        console.log(`📈 [REFRESH] Stream count changed: ${streamDifference > 0 ? '+' : ''}${streamDifference} streams`);
-      }
-
-      console.log(`✅ [REFRESH] Manual refresh completed - ${activeStreams.length} active streams`);
-
-      // If user is currently watching a stream, validate it still exists (side-effect only)
+      
+      // Check if current stream still exists
       if (currentlyWatching) {
-        const currentStreamExists = activeStreams.some(stream => stream.id === currentlyWatching);
+        const currentStreamExists = liveStreams.some(s => s.id === currentlyWatching);
         if (!currentStreamExists) {
-          console.log(`⚠️ [REFRESH] Current stream ${currentlyWatching} no longer exists, clearing state`);
           setCurrentlyWatching(null);
           setIsMinimized(false);
         }
       }
-
-      // Add a small delay to show the refresh animation
-      await new Promise(resolve => setTimeout(resolve, 500));
 
     } catch (error) {
       console.error('❌ [REFRESH] Error refreshing streams:', error);
