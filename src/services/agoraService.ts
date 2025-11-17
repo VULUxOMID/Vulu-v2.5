@@ -32,6 +32,9 @@ import {
   AGORA_AUDIO_SCENARIOS,
 } from '../config/agoraConfig';
 
+import * as Device from 'expo-device';
+import { Platform } from 'react-native';
+
 export interface AgoraParticipant {
   uid: number;
   userId: string;
@@ -134,6 +137,14 @@ class AgoraService {
       if (!isAgoraConfigured()) {
         console.warn('⚠️ Agora not configured. Cannot initialize RTC engine.');
         return false;
+      }
+
+      // Check if running on simulator
+      if (!Device.isDevice) {
+        console.error('❌ Agora SDK does not support iOS/Android Simulators');
+        console.error('📱 Please test on a REAL DEVICE for audio streaming to work');
+        console.error('💡 Run: npx expo run:ios --device');
+        throw new Error('Agora SDK requires a physical device. Please run on real iOS/Android hardware.');
       }
 
       if (this.rtcEngine) {
