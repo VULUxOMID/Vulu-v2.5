@@ -154,25 +154,38 @@ if (!isExpoGo) {
     if (agoraModule) {
       console.log('🔍 Agora module loaded, checking exports...');
       console.log('🔍 Module keys:', Object.keys(agoraModule).slice(0, 10).join(', '));
-      console.log('🔍 RtcEngine type:', typeof agoraModule.RtcEngine);
-      console.log('🔍 RtcEngine.create type:', typeof agoraModule.RtcEngine?.create);
       
-      // Try different ways to access RtcEngine
-      const RtcEngine = agoraModule.RtcEngine || agoraModule.default?.RtcEngine || agoraModule.default;
+      // react-native-agora v4.5.3 uses createAgoraRtcEngine() instead of RtcEngine.create()
+      const createAgoraRtcEngine = agoraModule.createAgoraRtcEngine;
       
-      // Verify that RtcEngine is actually available and has create method
-      if (RtcEngine && typeof RtcEngine.create === 'function') {
-        // Use the module but ensure RtcEngine is properly set
+      // Check if createAgoraRtcEngine is available (new API)
+      if (createAgoraRtcEngine && typeof createAgoraRtcEngine === 'function') {
+        console.log('✅ Found createAgoraRtcEngine function (v4.5.3+ API)');
+        
+        // Create a wrapper object that provides RtcEngine.create() for backward compatibility
+        // This allows our code to use RtcEngine.create() while using the new API internally
+        const RtcEngineWrapper = {
+          create: createAgoraRtcEngine,
+          destroy: agoraModule.destroy || (() => Promise.resolve())
+        };
+        
+        // Use the module but add our RtcEngine wrapper
         agoraExports = {
           ...agoraModule,
-          RtcEngine: RtcEngine
+          RtcEngine: RtcEngineWrapper
         };
         usingRealSDK = true;
         console.log('✅ Real Agora SDK imported and verified successfully');
-        console.log('✅ RtcEngine.create is available');
+        console.log('✅ Using createAgoraRtcEngine API (v4.5.3+)');
+      } else if (agoraModule.RtcEngine && typeof agoraModule.RtcEngine.create === 'function') {
+        // Fallback: Check for old API (RtcEngine.create)
+        console.log('✅ Found RtcEngine.create (legacy API)');
+        agoraExports = agoraModule;
+        usingRealSDK = true;
+        console.log('✅ Real Agora SDK imported and verified successfully');
       } else {
-        console.warn('⚠️ Agora SDK module found but RtcEngine.create is not available');
-        console.warn('⚠️ RtcEngine:', RtcEngine);
+        console.warn('⚠️ Agora SDK module found but neither createAgoraRtcEngine nor RtcEngine.create is available');
+        console.warn('⚠️ Available functions:', Object.keys(agoraModule).filter(k => typeof agoraModule[k] === 'function').join(', '));
         console.warn('⚠️ Falling back to mock - native module may not be properly linked');
         agoraExports = mockAgoraExports;
       }
@@ -194,20 +207,46 @@ if (!isExpoGo) {
   console.log('🎭 Expo Go detected - using mock Agora exports (native modules not supported in Expo Go)');
 }
 
+// Helper function to normalize enum values (handles both old and new API)
+const normalizeEnum = (oldEnum: any, newEnum: any, mockEnum: any) => {
+  if (newEnum) {
+    // New API - return as-is, it should have the same structure
+    return newEnum;
+  }
+  return oldEnum || mockEnum;
+};
+
 // Export all Agora types and classes
+// Handle both old API (ChannelProfile, ClientRole) and new API (ChannelProfileType, ClientRoleType)
 export default agoraExports.default;
 export const RtcEngine = agoraExports.RtcEngine;
-export const RtcEngineEvents = agoraExports.RtcEngineEvents;
-export const ChannelProfile = agoraExports.ChannelProfile || mockAgoraExports.ChannelProfile;
-export const ClientRole = agoraExports.ClientRole || mockAgoraExports.ClientRole;
-export const AudioProfile = agoraExports.AudioProfile || mockAgoraExports.AudioProfile;
-export const AudioScenario = agoraExports.AudioScenario || mockAgoraExports.AudioScenario;
+export const RtcEngineEvents = agoraExports.RtcEngineEvents || agoraExports.RtcEngineEventType || {};
+export const ChannelProfile = normalizeEnum(
+  agoraExports.ChannelProfile,
+  agoraExports.ChannelProfileType,
+  mockAgoraExports.ChannelProfile
+);
+export const ClientRole = normalizeEnum(
+  agoraExports.ClientRole,
+  agoraExports.ClientRoleType,
+  mockAgoraExports.ClientRole
+);
+export const AudioProfile = normalizeEnum(
+  agoraExports.AudioProfile,
+  agoraExports.AudioProfileType,
+  mockAgoraExports.AudioProfile
+);
+export const AudioScenario = normalizeEnum(
+  agoraExports.AudioScenario,
+  agoraExports.AudioScenarioType,
+  mockAgoraExports.AudioScenario
+);
 export const VideoEncoderConfiguration = agoraExports.VideoEncoderConfiguration || mockAgoraExports.VideoEncoderConfiguration;
 export const ConnectionStateType = agoraExports.ConnectionStateType || mockAgoraExports.ConnectionStateType;
-export const ConnectionChangedReason = agoraExports.ConnectionChangedReason || mockAgoraExports.ConnectionChangedReason;
-export const UserOfflineReason = agoraExports.UserOfflineReason || mockAgoraExports.UserOfflineReason;
-export const ErrorCode = agoraExports.ErrorCode || mockAgoraExports.ErrorCode;
-export const WarningCode = agoraExports.WarningCode || mockAgoraExports.WarningCode;
+export const ConnectionChangedReason = agoraExports.ConnectionChangedReason || agoraExports.ConnectionChangedReasonType || mockAgoraExports.ConnectionChangedReason;
+export const UserOfflineReason = agoraExports.UserOfflineReason || agoraExports.UserOfflineReasonType || mockAgoraExports.UserOfflineReason;
+export const ErrorCode = agoraExports.ErrorCode || agoraExports.ErrorCodeType || mockAgoraExports.ErrorCode;
+export const WarningCode = agoraExports.WarningCode || agoraExports.WarnCodeType || mockAgoraExports.WarningCode;
 
 // Export utility functions
 export const isAgoraAvailable = () => usingRealSDK && agoraExports.RtcEngine !== null && agoraExports.RtcEngine !== undefined;
