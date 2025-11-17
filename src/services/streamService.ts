@@ -98,7 +98,7 @@ class StreamService {
     }
 
     const streamId = `stream_${Date.now()}_${userId}`;
-    const now = serverTimestamp() as Timestamp;
+    const now = Timestamp.now();
 
     // Sanitize optional fields (Firestore rejects undefined)
     const sanitizedTitle = title?.trim() || 'Live Stream';
@@ -217,7 +217,7 @@ class StreamService {
     
     if (!isAlreadyParticipant) {
       // Add participant
-      const now = serverTimestamp() as Timestamp;
+      const now = Timestamp.now();
       const newParticipant: StreamParticipant = {
         id: userId,
         name: userName || 'Viewer',
