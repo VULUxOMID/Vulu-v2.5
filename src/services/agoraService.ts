@@ -161,32 +161,24 @@ class AgoraService {
       console.log('🔍 AudioProfile enum:', AudioProfile);
       console.log('🔍 AudioScenario enum:', AudioScenario);
 
-      // In v4.5.3+, the engine might need initialize() to be called after create()
-      if (typeof this.rtcEngine.initialize === 'function') {
-        console.log('🔄 Calling engine.initialize()...');
-        const initResult = await this.rtcEngine.initialize();
-        console.log('✅ Engine initialized, result:', initResult);
-      } else {
-        console.log('ℹ️ Engine does not have initialize() method - may already be initialized');
-      }
+      // In v4.5.3+, createAgoraRtcEngine already initializes the engine
+      // Don't call initialize() - it's not needed and returns -2
+      // The engine is ready to use immediately after create()
 
       // Set channel profile for live broadcasting
-      // Try both enum names (ChannelProfile and ChannelProfileType)
-      // LiveBroadcasting is typically value 1
-      const channelProfileValue = ChannelProfile?.LiveBroadcasting ?? ChannelProfile?.[1] ?? 1;
-      console.log('🔄 Setting channel profile to LiveBroadcasting, value:', channelProfileValue);
+      // Use numeric value directly: LiveBroadcasting = 1
+      // From logs: ChannelProfileLiveBroadcasting: 1
+      const channelProfileValue = typeof ChannelProfile?.ChannelProfileLiveBroadcasting === 'number' 
+        ? ChannelProfile.ChannelProfileLiveBroadcasting 
+        : (typeof ChannelProfile?.LiveBroadcasting === 'number' 
+          ? ChannelProfile.LiveBroadcasting 
+          : 1); // Default to 1 if enum not found
+      
+      console.log('🔄 Setting channel profile to LiveBroadcasting, numeric value:', channelProfileValue);
       try {
         const profileResult = await this.rtcEngine.setChannelProfile(channelProfileValue);
         if (profileResult !== 0) {
           console.warn('⚠️ setChannelProfile returned non-zero result:', profileResult);
-          // Try with numeric value 1 directly
-          console.log('🔄 Retrying with numeric value 1...');
-          const retryResult = await this.rtcEngine.setChannelProfile(1);
-          if (retryResult !== 0) {
-            console.warn('⚠️ setChannelProfile still failed with numeric 1:', retryResult);
-          } else {
-            console.log('✅ Channel profile set successfully with numeric value');
-          }
         } else {
           console.log('✅ Channel profile set successfully');
         }
@@ -195,22 +187,27 @@ class AgoraService {
       }
 
       // Configure audio settings for social streaming
-      // MusicHighQuality is typically value 4, ChatRoomEntertainment is typically value 1
-      const audioProfileValue = AudioProfile?.MusicHighQuality ?? AudioProfile?.[4] ?? 4;
-      const audioScenarioValue = AudioScenario?.ChatRoomEntertainment ?? AudioScenario?.[1] ?? 1;
+      // Use numeric values directly:
+      // - AudioProfileMusicHighQuality = 4
+      // - AudioScenarioChatroom = 5 (not ChatRoomEntertainment = 1)
+      // From logs: AudioProfileMusicHighQuality: 4, AudioScenarioChatroom: 5
+      const audioProfileValue = typeof AudioProfile?.AudioProfileMusicHighQuality === 'number'
+        ? AudioProfile.AudioProfileMusicHighQuality
+        : (typeof AudioProfile?.MusicHighQuality === 'number'
+          ? AudioProfile.MusicHighQuality
+          : 4); // Default to 4 if enum not found
+      
+      const audioScenarioValue = typeof AudioScenario?.AudioScenarioChatroom === 'number'
+        ? AudioScenario.AudioScenarioChatroom
+        : (typeof AudioScenario?.ChatRoomEntertainment === 'number'
+          ? AudioScenario.ChatRoomEntertainment
+          : 5); // Default to 5 (Chatroom) if enum not found
+      
       console.log('🔄 Setting audio profile:', { profile: audioProfileValue, scenario: audioScenarioValue });
       try {
         const audioResult = await this.rtcEngine.setAudioProfile(audioProfileValue, audioScenarioValue);
         if (audioResult !== 0) {
           console.warn('⚠️ setAudioProfile returned non-zero result:', audioResult);
-          // Try with numeric values directly
-          console.log('🔄 Retrying with numeric values (4, 1)...');
-          const retryResult = await this.rtcEngine.setAudioProfile(4, 1);
-          if (retryResult !== 0) {
-            console.warn('⚠️ setAudioProfile still failed with numeric values:', retryResult);
-          } else {
-            console.log('✅ Audio profile set successfully with numeric values');
-          }
         } else {
           console.log('✅ Audio profile set successfully');
         }
@@ -499,8 +496,29 @@ class AgoraService {
       }
 
       // Set client role for real Agora SDK
-      const clientRole = isHost ? ClientRole.Broadcaster : ClientRole.Audience;
-      await this.rtcEngine.setClientRole(clientRole);
+      // Use numeric values: Broadcaster = 1, Audience = 2
+      // From Agora SDK: ClientRoleBroadcaster = 1, ClientRoleAudience = 2
+      let clientRole: number;
+      if (isHost) {
+        clientRole = typeof ClientRole?.ClientRoleBroadcaster === 'number'
+          ? ClientRole.ClientRoleBroadcaster
+          : (typeof ClientRole?.Broadcaster === 'number'
+            ? ClientRole.Broadcaster
+            : 1); // Default to 1 (Broadcaster)
+      } else {
+        clientRole = typeof ClientRole?.ClientRoleAudience === 'number'
+          ? ClientRole.ClientRoleAudience
+          : (typeof ClientRole?.Audience === 'number'
+            ? ClientRole.Audience
+            : 2); // Default to 2 (Audience)
+      }
+      console.log(`🔄 Setting client role to ${isHost ? 'Broadcaster' : 'Audience'}, numeric value:`, clientRole);
+      const roleResult = await this.rtcEngine.setClientRole(clientRole);
+      if (roleResult !== 0) {
+        console.warn('⚠️ setClientRole returned non-zero result:', roleResult);
+      } else {
+        console.log('✅ Client role set successfully');
+      }
       
       // For audience members, ensure remote audio subscription is enabled
       // (In Live Broadcasting mode, this should be automatic, but we ensure it)
