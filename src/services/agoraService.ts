@@ -239,6 +239,37 @@ class AgoraService {
       // Wait a bit more after setting up listeners to ensure they're registered
       await new Promise(resolve => setTimeout(resolve, 200));
 
+      // Wait for engine to be ready by polling a simple API call
+      // The engine is ready when API calls stop returning -7
+      console.log('⏳ Waiting for engine to be fully ready...');
+      let readyAttempts = 0;
+      const maxReadyAttempts = 20; // 20 attempts * 200ms = 4 seconds max
+      while (readyAttempts < maxReadyAttempts) {
+        try {
+          // Try a simple API call that should work when engine is ready
+          // getConnectionState is a read-only call that should work even if engine isn't fully ready
+          // But if it returns -7, the engine definitely isn't ready
+          const testResult = await this.rtcEngine.getConnectionState();
+          if (testResult !== -7) {
+            console.log('✅ Engine is ready (getConnectionState returned non--7)');
+            break;
+          }
+        } catch (error) {
+          // Ignore errors, just continue polling
+        }
+        
+        readyAttempts++;
+        if (readyAttempts < maxReadyAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+      
+      if (readyAttempts >= maxReadyAttempts) {
+        console.warn('⚠️ Engine readiness check timed out, but continuing anyway');
+      } else {
+        console.log(`✅ Engine became ready after ${readyAttempts * 200}ms`);
+      }
+
       this.streamState.isConnected = true;
       console.log('✅ Agora RTC Engine initialized successfully');
       return true;
@@ -665,9 +696,33 @@ class AgoraService {
       // In v4.5.3+, the API signature changed
       // Try new API: joinChannel(token, channelId, uid) - 3 parameters
       
-      // Wait additional time before attempting to join (engine may need more time after configuration)
-      console.log('⏳ Waiting before join attempt to ensure engine is ready...');
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Verify engine is ready before attempting to join
+      // Poll getConnectionState until it doesn't return -7
+      console.log('⏳ Verifying engine is ready before join...');
+      let readyCheckAttempts = 0;
+      const maxReadyCheckAttempts = 15; // 15 attempts * 300ms = 4.5 seconds max
+      while (readyCheckAttempts < maxReadyCheckAttempts) {
+        try {
+          const stateResult = await this.rtcEngine.getConnectionState();
+          if (stateResult !== -7 && stateResult !== undefined && stateResult !== null) {
+            console.log('✅ Engine verified ready for join (getConnectionState returned:', stateResult, ')');
+            break;
+          }
+        } catch (error) {
+          // Ignore errors, continue polling
+        }
+        
+        readyCheckAttempts++;
+        if (readyCheckAttempts < maxReadyCheckAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+      
+      if (readyCheckAttempts >= maxReadyCheckAttempts) {
+        console.warn('⚠️ Engine readiness verification timed out, but attempting join anyway');
+      } else {
+        console.log(`✅ Engine ready after ${readyCheckAttempts * 300}ms`);
+      }
       
       // Create a promise that will resolve when JoinChannelSuccess callback fires
       return new Promise<boolean>((resolve, reject) => {
@@ -675,9 +730,9 @@ class AgoraService {
           if (this.joinChannelPromise) {
             this.joinChannelPromise = null;
           }
-          console.error('❌ Join channel timeout - JoinChannelSuccess callback did not fire within 10 seconds');
-          reject(new Error('Join channel timeout - callback did not fire'));
-        }, 10000); // 10 second timeout
+          console.error('❌ Join channel timeout - JoinChannelSuccess callback did not fire within 15 seconds');
+          reject(new Error('Join channel timeout - callback did not fire within 15 seconds'));
+        }, 15000); // 15 second timeout (increased to allow more time for engine to become ready)
         
         this.joinChannelPromise = { resolve, reject, timeout };
         
