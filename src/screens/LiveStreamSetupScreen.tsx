@@ -20,7 +20,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { PURPLE } from '../constants/colors';
 import { useAuth } from '../context/AuthContext';
 import { useLiveStreams } from '../context/LiveStreamContext';
-import { streamingService } from '../services/streamingService';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
