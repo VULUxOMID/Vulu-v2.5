@@ -143,7 +143,15 @@ class AgoraService {
       console.log('🔄 Initializing Agora RTC Engine...');
 
       // Create RTC Engine instance
-      this.rtcEngine = await RtcEngine.create(this.config.appId);
+      // For v4.5.3+, createAgoraRtcEngine may need a config object
+      try {
+        // Try with config object first (new API)
+        this.rtcEngine = await RtcEngine.create({ appId: this.config.appId });
+      } catch (error) {
+        // Fallback to string appId (old API)
+        console.log('⚠️ Config object failed, trying string appId...');
+        this.rtcEngine = await RtcEngine.create(this.config.appId);
+      }
 
       // Set channel profile for live broadcasting
       await this.rtcEngine.setChannelProfile(ChannelProfile.LiveBroadcasting);
