@@ -823,26 +823,34 @@ class AgoraService {
   /**
    * Leave the current channel
    */
-  async leaveChannel(): Promise<void> {
+  async leaveChannel(force: boolean = false): Promise<void> {
     try {
-      if (!this.streamState.isJoined || !this.rtcEngine) return;
+      if (!this.rtcEngine) return;
 
-      console.log('🔄 Leaving channel...');
+      const hasPendingJoin = !!this.joinChannelPromise;
+      const hasChannelContext = !!this.streamState.channelName;
+      const shouldLeave = force || this.streamState.isJoined || hasPendingJoin || hasChannelContext;
+
+      if (!shouldLeave) {
+        return;
+      }
+
+      console.log(`🔄 Leaving channel${force ? ' (force)' : ''}...`);
+
+      if (hasPendingJoin) {
+        this.rejectPendingJoin(new Error('Leave channel invoked while join was pending'));
+      }
 
       // Handle mock service
       if (this.isUsingMockService) {
         console.log('🎭 Using mock service to leave channel');
         await this.rtcEngine.leaveChannel();
-        this.streamState.isJoined = false;
-        this.streamState.channelName = '';
-        this.streamState.participants.clear();
-        return;
+      } else {
+        // Leave the channel even if join never completed
+        await this.rtcEngine.leaveChannel();
       }
 
-      // Leave the channel
-      await this.rtcEngine.leaveChannel();
-
-      // Reset state (will be updated by event listener)
+      // Reset state (will be updated by event listener as well)
       this.streamState.isJoined = false;
       this.streamState.channelName = '';
       this.streamState.localUid = 0;
@@ -855,6 +863,7 @@ class AgoraService {
 
     } catch (error: any) {
       console.error('❌ Failed to leave channel:', error);
+      throw error;
     }
   }
 
@@ -1049,14 +1058,10 @@ class AgoraService {
     try {
       console.log('🧹 Cleaning up Agora resources...');
 
-      // Leave channel if connected
-      if (this.rtcEngine) {
-        try {
-          await this.rtcEngine.leaveChannel();
-        } catch (leaveError) {
-          console.warn('Error leaving channel:', leaveError);
-        }
+      // Leave channel if connected or pending
+      await this.leaveChannel(true);
 
+      if (this.rtcEngine) {
         // Destroy engine instance
         try {
           await this.rtcEngine.destroy();
@@ -1086,9 +1091,7 @@ class AgoraService {
    */
   async destroy(): Promise<void> {
     try {
-      if (this.streamState.isJoined) {
-        await this.leaveChannel();
-      }
+      await this.leaveChannel(true);
 
       if (this.rtcEngine) {
         // For mock service, call its destroy method directly

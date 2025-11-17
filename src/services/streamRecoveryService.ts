@@ -307,7 +307,7 @@ class StreamRecoveryService {
       console.log('🔄 [RECOVERY] Attempting reconnect');
       
       // Leave current channel if still connected
-      await agoraService.leaveChannel();
+      await agoraService.leaveChannel(true);
       
       // Wait a moment
       await this.delay(1000);
