@@ -813,12 +813,12 @@ class AgoraService {
       this.streamState.channelName = channelName;
       this.streamState.localUid = uid;
 
-      // Join channel - simple promise with 5 second timeout
+      // Join channel - simple promise with 15 second timeout
       return new Promise<boolean>((resolve, reject) => {
         const timeout = setTimeout(() => {
           console.error('⏰ Join channel timeout');
           this.rejectPendingJoin(new Error('Join channel timeout'));
-        }, 5000); // 5 second timeout (simplified from 15)
+        }, 15000);
 
         this.joinChannelPromise = {
           channelName,
@@ -1081,7 +1081,11 @@ class AgoraService {
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
-    return Math.abs(hash) % 2147483647; // Ensure positive and within Agora's UID range
+    let uid = Math.abs(hash) % 2147483647;
+    if (uid === 0) {
+      uid = Math.floor(1 + Math.random() * 2147483646);
+    }
+    return uid; // Ensure positive, non-zero, within Agora's UID range
   }
 
   /**

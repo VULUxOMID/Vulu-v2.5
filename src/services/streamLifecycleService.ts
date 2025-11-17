@@ -18,11 +18,12 @@ import {
   onSnapshot,
   serverTimestamp,
   Timestamp,
-  runTransaction
+  runTransaction,
+  setDoc
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { Stream, StreamCategory, StreamQuality } from './firestoreService';
-import agoraService from './agoraService';
+import { agoraService } from './agoraService';
 import participantTrackingService from './participantTrackingService';
 import { agoraTokenService } from './agoraTokenService';
 
@@ -124,7 +125,7 @@ class StreamLifecycleService {
       };
 
       // Create stream document
-      await doc(db, 'streams', streamId).set(streamData);
+      await setDoc(doc(db, 'streams', streamId), streamData);
 
       // Initialize Agora connection
       await this.initializeAgoraConnection(streamId);
@@ -350,7 +351,7 @@ class StreamLifecycleService {
   private async performStreamHealthCheck(streamId: string): Promise<void> {
     try {
       // Check Agora connection status
-      const agoraStatus = agoraService.getConnectionState();
+      const agoraStatus = agoraService.getStreamState().connectionState;
       
       // Check participant activity
       const participantCount = await participantTrackingService.getParticipantCount(streamId);

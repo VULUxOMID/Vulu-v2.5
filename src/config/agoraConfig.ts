@@ -35,10 +35,10 @@ export interface AgoraConfig {
  */
 export const defaultAgoraConfig: AgoraConfig = {
   // Agora credentials from environment (with fallback for debugging)
-  appId: process.env.EXPO_PUBLIC_AGORA_APP_ID || '5943c83532bf462a95e260293f6c9e11',
-  appCertificate: process.env.EXPO_PUBLIC_AGORA_APP_CERTIFICATE || '14774f02c9fa45f2b2b35ef32e63f9c9',
-  customerId: process.env.EXPO_PUBLIC_AGORA_CUSTOMER_ID || '5943c83532bf462a95e260293f6c9e11',
-  customerSecret: process.env.EXPO_PUBLIC_AGORA_CUSTOMER_SECRET || '14774f02c9fa45f2b2b35ef32e63f9c9',
+  appId: process.env.EXPO_PUBLIC_AGORA_APP_ID || '',
+  appCertificate: process.env.EXPO_PUBLIC_AGORA_APP_CERTIFICATE || '',
+  customerId: process.env.EXPO_PUBLIC_AGORA_CUSTOMER_ID || '',
+  customerSecret: process.env.EXPO_PUBLIC_AGORA_CUSTOMER_SECRET || '',
   
   // Streaming settings
   enableVideoStreaming: process.env.EXPO_PUBLIC_ENABLE_VIDEO_STREAMING === 'true',
