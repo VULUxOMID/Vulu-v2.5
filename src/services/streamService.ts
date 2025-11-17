@@ -100,16 +100,24 @@ class StreamService {
     const streamId = `stream_${Date.now()}_${userId}`;
     const now = serverTimestamp() as Timestamp;
 
+    // Sanitize optional fields (Firestore rejects undefined)
+    const sanitizedTitle = title?.trim() || 'Live Stream';
+    const sanitizedDescription = options?.description ?? '';
+    const sanitizedCategory = options?.category || 'just-chatting';
+    const sanitizedTags = options?.tags ?? [];
+    const sanitizedHostName = userName || 'Host';
+    const sanitizedHostAvatar = userAvatar || null;
+
     // Create stream document
     const streamData: Partial<Stream> = {
       id: streamId,
       hostId: userId,
-      hostName: userName || 'Host',
-      hostAvatar: userAvatar || null,
-      title: title || 'Live Stream',
-      description: options?.description,
-      category: options?.category || 'just-chatting',
-      tags: options?.tags || [],
+      hostName: sanitizedHostName,
+      hostAvatar: sanitizedHostAvatar,
+      title: sanitizedTitle,
+      description: sanitizedDescription,
+      category: sanitizedCategory,
+      tags: sanitizedTags,
       isActive: true,
       isPublic: true,
       startedAt: now,
@@ -118,8 +126,8 @@ class StreamService {
       totalViewers: 1,
       participants: [{
         id: userId,
-        name: userName || 'Host',
-        avatar: userAvatar || null,
+        name: sanitizedHostName,
+        avatar: sanitizedHostAvatar,
         role: 'host',
         isHost: true,
         joinedAt: now,
