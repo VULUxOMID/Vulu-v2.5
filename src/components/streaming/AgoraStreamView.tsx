@@ -73,6 +73,7 @@ export const AgoraStreamView: React.FC<AgoraStreamViewProps> = ({
   const [participantsListVisible, setParticipantsListVisible] = useState(false);
   const appStateRef = useRef(AppState.currentState);
   const retryTimeoutRef = useRef<NodeJS.Timeout>();
+  const initializationRef = useRef<{ attempted: boolean; streamId: string | null }>({ attempted: false, streamId: null });
 
   // App lifecycle management
   const streamLifecycle = useStreamLifecycle(
@@ -279,12 +280,39 @@ export const AgoraStreamView: React.FC<AgoraStreamViewProps> = ({
       // Join the channel
       const joined = await agoraService.joinChannel(streamId, userId, isHost);
       if (!joined) {
+        // In dev mode, if join fails due to validation, don't throw error - just log and continue
+        // The validation service should have already allowed access in dev mode
+        if (__DEV__) {
+          console.warn('⚠️ [AGORA_VIEW] Join channel returned false in dev mode - this may be expected if validation function is not available');
+          // Don't throw error in dev mode - allow UI to continue
+          setStreamState(prev => ({
+            ...prev,
+            isConnecting: false,
+            error: null, // Clear error in dev mode
+          }));
+          return;
+        }
         throw new Error('Failed to join channel');
       }
 
     } catch (error: any) {
       console.error('❌ [AGORA_VIEW] Failed to initialize and join:', error);
       const errorMessage = error.message || 'Failed to join stream';
+      
+      // In dev mode, if this is a validation error, don't trigger recovery
+      const isValidationError = error?.code === 'functions/not-found' || 
+                                error?.code === 'functions/unavailable' ||
+                                errorMessage.toLowerCase().includes('stream access denied');
+      
+      if (__DEV__ && isValidationError) {
+        console.warn('⚠️ [AGORA_VIEW] Validation error in dev mode - skipping recovery');
+        setStreamState(prev => ({
+          ...prev,
+          error: null, // Clear error in dev mode
+          isConnecting: false,
+        }));
+        return; // Don't trigger recovery for validation errors in dev mode
+      }
 
       setStreamState(prev => ({
         ...prev,
@@ -293,7 +321,7 @@ export const AgoraStreamView: React.FC<AgoraStreamViewProps> = ({
         isConnected: false
       }));
 
-      // Trigger automatic recovery for initialization failures
+      // Trigger automatic recovery for initialization failures (only if not a validation error)
       recovery.handleError(error);
       onError?.(errorMessage);
     }
@@ -374,8 +402,18 @@ export const AgoraStreamView: React.FC<AgoraStreamViewProps> = ({
     };
   }, [streamState.localControls.isVideoEnabled, streamLifecycle, toggleVideo]);
 
-  // Initialize on mount
+  // Initialize on mount (only once per streamId)
   useEffect(() => {
+    // Prevent re-initialization if we've already attempted for this streamId
+    if (initializationRef.current.attempted && initializationRef.current.streamId === streamId) {
+      console.log('🔄 [AGORA_VIEW] Already initialized for stream:', streamId, '- skipping');
+      return;
+    }
+
+    // Mark as attempted
+    initializationRef.current = { attempted: true, streamId };
+
+    console.log('🔄 [AGORA_VIEW] Initializing for stream:', streamId);
     initializeAndJoin();
 
     // Start performance monitoring
@@ -393,8 +431,13 @@ export const AgoraStreamView: React.FC<AgoraStreamViewProps> = ({
 
       // Stop performance monitoring
       performance.stopMonitoring();
+      
+      // Reset initialization flag if streamId changes
+      if (initializationRef.current.streamId !== streamId) {
+        initializationRef.current = { attempted: false, streamId: null };
+      }
     };
-  }, []); // Only run once on mount
+  }, [streamId]); // Re-run if streamId changes
 
   // Audio control methods
   const toggleMute = useCallback(async () => {

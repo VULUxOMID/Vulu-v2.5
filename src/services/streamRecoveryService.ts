@@ -97,6 +97,17 @@ class StreamRecoveryService {
 
     // Determine recovery strategy based on error type
     const strategies = this.determineRecoveryStrategies(error);
+    
+    // If no strategies (e.g., validation error in dev mode), return success to prevent retry loop
+    if (strategies.length === 0) {
+      console.log('🔄 [RECOVERY] No recovery strategies for this error type - skipping recovery');
+      return {
+        success: true, // Return success to prevent retry loop
+        strategy: RecoveryStrategy.FALLBACK_MODE,
+        attempts: 0,
+        totalDuration: 0,
+      };
+    }
 
     for (const strategy of strategies) {
       if (attempts >= opts.maxRetries) {
@@ -185,6 +196,24 @@ class StreamRecoveryService {
    * Determine recovery strategies based on error type
    */
   private determineRecoveryStrategies(error: any): RecoveryStrategy[] {
+    // Check if this is a validation error that shouldn't trigger recovery
+    const errorMessage = error?.message?.toLowerCase() || '';
+    const errorCode = error?.code || '';
+    
+    // Don't recover from validation errors - they should be handled gracefully in dev mode
+    if (
+      errorMessage.includes('stream access denied') ||
+      (errorMessage.includes('failed to join channel') && errorCode === 'functions/not-found') ||
+      errorCode === 'functions/not-found' ||
+      errorCode === 'functions/unavailable'
+    ) {
+      // In dev mode, validation errors are expected and shouldn't trigger recovery
+      if (__DEV__) {
+        console.log('🔄 [RECOVERY] Skipping recovery for validation error in dev mode:', errorMessage);
+        return []; // Return empty array to skip recovery
+      }
+    }
+    
     const errorInfo = FirebaseErrorHandler.handleError(error);
     
     switch (errorInfo.category) {

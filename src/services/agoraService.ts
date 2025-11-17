@@ -331,9 +331,20 @@ class AgoraService {
   async validateStreamAccess(streamId: string): Promise<boolean> {
     try {
       const validation = await agoraTokenService.validateStreamAccess(streamId);
+      // In dev mode, always allow access even if validation returns false
+      // (validation service already handles not-found errors, but be extra permissive)
+      if (__DEV__ && !validation.canJoin) {
+        console.warn('⚠️ Stream access validation returned false, but allowing in dev mode');
+        return true;
+      }
       return validation.canJoin;
     } catch (error: any) {
-      console.error('❌ Stream access validation failed:', error);
+      // If validation service already handled the error and returned canJoin: true,
+      // we shouldn't get here. But if we do, allow access in dev mode
+      console.warn('⚠️ Stream access validation error (allowing in dev mode):', error);
+      if (__DEV__) {
+        return true; // Allow access in development
+      }
       return false;
     }
   }
@@ -349,12 +360,19 @@ class AgoraService {
     validateAccess: boolean = true
   ): Promise<boolean> {
     try {
-      // Validate stream access if requested
+      // Validate stream access if requested (skip for hosts, they already have access)
       if (validateAccess && !isHost) {
         const hasAccess = await this.validateStreamAccess(channelName);
         if (!hasAccess) {
-          console.error('❌ Stream access denied');
-          return false;
+          // validateStreamAccess already allows access in dev mode, so if we get here in production, deny
+          if (__DEV__) {
+            // This shouldn't happen since validateStreamAccess allows in dev mode, but just in case
+            console.warn('⚠️ Stream access validation returned false in dev mode - this is unexpected, but continuing anyway');
+            // Continue anyway in dev mode
+          } else {
+            console.error('❌ Stream access denied');
+            return false;
+          }
         }
       }
 
@@ -680,13 +698,23 @@ class AgoraService {
       }
 
       if (this.rtcEngine) {
-        // Remove all listeners (only if method exists - not available in mock)
-        if (typeof this.rtcEngine.removeAllListeners === 'function') {
-          this.rtcEngine.removeAllListeners();
-        }
+        // For mock service, call its destroy method directly
+        if (this.isUsingMockService) {
+          try {
+            if (typeof (this.rtcEngine as any).destroy === 'function') {
+              await (this.rtcEngine as any).destroy();
+            }
+          } catch (mockError) {
+            console.warn('⚠️ Error destroying mock service (non-critical):', mockError);
+          }
+        } else {
+          // For real Agora SDK, remove listeners and destroy
+          // Remove all listeners (only if method exists)
+          if (typeof this.rtcEngine.removeAllListeners === 'function') {
+            this.rtcEngine.removeAllListeners();
+          }
 
-        // Destroy the engine (only for real Agora SDK)
-        if (!this.isUsingMockService) {
+          // Destroy the engine
           await RtcEngine.destroy();
         }
         this.rtcEngine = null;
