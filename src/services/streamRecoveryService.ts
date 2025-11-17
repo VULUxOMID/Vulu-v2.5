@@ -205,24 +205,31 @@ class StreamRecoveryService {
       errorMessage.includes('stream access denied') ||
       (errorMessage.includes('failed to join channel') && errorCode === 'functions/not-found') ||
       errorCode === 'functions/not-found' ||
-      errorCode === 'functions/unavailable'
+      errorCode === 'functions/unavailable' ||
+      errorCode === 'functions/failed-precondition' ||
+      errorMessage.includes('stream is not active') ||
+      errorMessage.includes('token generation failed')
     ) {
       // In dev mode, validation errors are expected and shouldn't trigger recovery
       if (__DEV__) {
-        console.log('🔄 [RECOVERY] Skipping recovery for validation error in dev mode:', errorMessage);
+        console.log('🔄 [RECOVERY] Skipping recovery for validation/stream error in dev mode:', errorMessage);
         return []; // Return empty array to skip recovery
       }
+    }
+
+    // Network errors: don't hammer Agora, user must fix their network first
+    if (errorMessage.includes('-1003') || errorMessage.includes('could not connect') || errorMessage.includes('http load failed')) {
+      console.log('🔄 [RECOVERY] Skipping recovery for network connectivity error - user must fix network');
+      return [];
     }
     
     const errorInfo = FirebaseErrorHandler.handleError(error);
     
     switch (errorInfo.category) {
       case ErrorCategory.NETWORK:
-        return [
-          RecoveryStrategy.RECONNECT,
-          RecoveryStrategy.TOKEN_RENEWAL,
-          RecoveryStrategy.REINITIALIZE,
-        ];
+        // Skip recovery for network errors - they'll resolve when network is fixed
+        console.log('🔄 [RECOVERY] Skipping recovery for network error - wait for network to stabilize');
+        return [];
 
       case ErrorCategory.AUTHENTICATION:
         return [

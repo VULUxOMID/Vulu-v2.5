@@ -319,13 +319,13 @@ class AgoraService {
 
     // User joined channel
     this.rtcEngine.addListener('UserJoined', (uid: number, elapsed: number) => {
-      console.log(`👤 User joined: ${uid}`);
+      console.log('👤 User joined:', uid);
       this.eventCallbacks.onUserJoined?.(uid, elapsed);
     });
 
     // User left channel
     this.rtcEngine.addListener('UserOffline', (uid: number, reason: UserOfflineReason) => {
-      console.log(`👤 User offline: ${uid}, reason: ${reason}`);
+      console.log('👤 User offline:', uid, 'reason:', reason);
       this.streamState.participants.delete(uid);
       this.eventCallbacks.onUserOffline?.(uid, reason);
     });
@@ -345,8 +345,7 @@ class AgoraService {
 
     // Connection state changed
     this.rtcEngine.addListener('ConnectionStateChanged', (state: ConnectionStateType, reason: ConnectionChangedReason) => {
-      console.log(`🔗 Connection state changed: state=${state} (${typeof state}), reason=${reason} (${typeof reason})`);
-      console.log(`🔗 ConnectionStateType.Connected=${ConnectionStateType.Connected}, ConnectionChangedReason.JoinSuccess=${ConnectionChangedReason.JoinSuccess}`);
+      console.log('🔗 Connection state changed: state=', state, 'reason=', reason);
       this.streamState.connectionState = state;
       
       // FALLBACK: If JoinChannelSuccess doesn't fire, use ConnectionStateChanged as backup
@@ -357,7 +356,6 @@ class AgoraService {
       
       if (isConnected && isJoinSuccess) {
         console.log('✅ Connection state indicates successful join (fallback detection)');
-        console.log(`🔍 Checking if we should resolve: joinChannelPromise exists=${!!this.joinChannelPromise}, isJoined=${this.streamState.isJoined}`);
         
         // Only resolve if we're waiting for a join and haven't already resolved
         if (this.joinChannelPromise && this.streamState.isJoined === false) {
@@ -365,7 +363,7 @@ class AgoraService {
           const channelName = this.streamState.channelName || '';
           const uid = this.streamState.localUid || 0;
           
-          console.log(`✅ Resolving join promise via ConnectionStateChanged fallback: channel=${channelName}, uid=${uid}`);
+          console.log('✅ Resolving join promise via ConnectionStateChanged fallback: channel=', channelName, 'uid=', uid);
           
           this.streamState.isJoined = true;
           this.resolvePendingJoin(true);
@@ -385,7 +383,7 @@ class AgoraService {
     // Join channel success
     // Register the primary event listener
     this.rtcEngine.addListener('JoinChannelSuccess', async (channel: string, uid: number, elapsed: number) => {
-      console.log(`✅ [JoinChannelSuccess] Successfully joined channel: ${channel} with UID: ${uid}, elapsed: ${elapsed}ms`);
+      console.log('✅ [JoinChannelSuccess] Successfully joined channel:', channel, 'UID:', uid, 'elapsed:', elapsed);
       this.streamState.isJoined = true;
       this.streamState.channelName = channel;
       this.streamState.localUid = uid;
@@ -431,7 +429,7 @@ class AgoraService {
     // These will only fire if the event name matches, so no harm in registering multiple
     try {
       this.rtcEngine.addListener('onJoinChannelSuccess', async (channel: string, uid: number, elapsed: number) => {
-        console.log(`✅ [onJoinChannelSuccess] Successfully joined channel: ${channel} with UID: ${uid}`);
+        console.log('✅ [onJoinChannelSuccess] Successfully joined channel:', channel, 'UID:', uid);
         // Same handling as above, but check if already resolved to avoid double resolution
         if (!this.streamState.isJoined && this.joinChannelPromise) {
           this.streamState.isJoined = true;
@@ -477,7 +475,7 @@ class AgoraService {
 
     // Remote audio state changed
     this.rtcEngine.addListener('RemoteAudioStateChanged', (uid: number, state: number, reason: number, elapsed: number) => {
-      console.log(`🔊 Remote audio state changed for ${uid}: state=${state}, reason=${reason}`);
+      console.log('🔊 Remote audio state changed for uid:', uid, 'state:', state, 'reason:', reason);
       const participant = this.streamState.participants.get(uid);
       if (participant) {
         participant.isMuted = state === 0; // 0 = stopped, 2 = decoding
