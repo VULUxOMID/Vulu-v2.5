@@ -155,6 +155,9 @@ class AgoraService {
         console.log('✅ Engine created with string appId');
       }
 
+      // Small delay to ensure engine is fully ready (some APIs may return -7 ERR_NOT_READY immediately after creation)
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       // Debug: Log available methods and enum values
       console.log('🔍 Engine methods:', Object.keys(this.rtcEngine).filter(k => typeof this.rtcEngine[k] === 'function').slice(0, 10).join(', '));
       console.log('🔍 ChannelProfile enum:', ChannelProfile);
@@ -163,7 +166,7 @@ class AgoraService {
 
       // In v4.5.3+, createAgoraRtcEngine already initializes the engine
       // Don't call initialize() - it's not needed and returns -2
-      // The engine is ready to use immediately after create()
+      // The engine is ready to use after a brief delay
 
       // Set channel profile for live broadcasting
       // Use numeric value directly: LiveBroadcasting = 1
@@ -177,10 +180,11 @@ class AgoraService {
       console.log('🔄 Setting channel profile to LiveBroadcasting, numeric value:', channelProfileValue);
       try {
         const profileResult = await this.rtcEngine.setChannelProfile(channelProfileValue);
+        // Return value 0 means success, even if outdata shows -7 (ERR_NOT_READY) warning
         if (profileResult !== 0) {
           console.warn('⚠️ setChannelProfile returned non-zero result:', profileResult);
         } else {
-          console.log('✅ Channel profile set successfully');
+          console.log('✅ Channel profile set successfully (return value: 0)');
         }
       } catch (error) {
         console.error('❌ Error setting channel profile:', error);
@@ -206,10 +210,11 @@ class AgoraService {
       console.log('🔄 Setting audio profile:', { profile: audioProfileValue, scenario: audioScenarioValue });
       try {
         const audioResult = await this.rtcEngine.setAudioProfile(audioProfileValue, audioScenarioValue);
+        // Return value 0 means success, even if outdata shows -7 (ERR_NOT_READY) warning
         if (audioResult !== 0) {
           console.warn('⚠️ setAudioProfile returned non-zero result:', audioResult);
         } else {
-          console.log('✅ Audio profile set successfully');
+          console.log('✅ Audio profile set successfully (return value: 0)');
         }
       } catch (error) {
         console.error('❌ Error setting audio profile:', error);
@@ -514,10 +519,12 @@ class AgoraService {
       }
       console.log(`🔄 Setting client role to ${isHost ? 'Broadcaster' : 'Audience'}, numeric value:`, clientRole);
       const roleResult = await this.rtcEngine.setClientRole(clientRole);
+      // Return value 0 means success, even if outdata shows -7 (ERR_NOT_READY) warning
+      // The -7 warning in outdata is often non-critical and the engine will be ready when joining
       if (roleResult !== 0) {
         console.warn('⚠️ setClientRole returned non-zero result:', roleResult);
       } else {
-        console.log('✅ Client role set successfully');
+        console.log('✅ Client role set successfully (return value: 0)');
       }
       
       // For audience members, ensure remote audio subscription is enabled
