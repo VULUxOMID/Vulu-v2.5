@@ -194,6 +194,11 @@ class MockAgoraService {
       setClientRole: () => Promise.resolve(0),
       enableAudioVolumeIndication: () => Promise.resolve(0),
       renewToken: () => Promise.resolve(0),
+      muteAllRemoteAudioStreams: (muted: boolean) => {
+        console.log('🎭 Mock Agora Engine: muteAllRemoteAudioStreams called with:', muted);
+        // In mock, we just log this - remote audio is always "available" in simulation
+        return Promise.resolve(0);
+      },
     };
     
     console.log('✅ Mock Agora: Initialized successfully');
@@ -224,6 +229,17 @@ class MockAgoraService {
     this.streamState.isJoined = true;
     this.streamState.isConnected = true;
     this.streamState.connectionState = ConnectionStateType.Connected;
+    
+    // For hosts: ensure audio is unmuted by default
+    // For audience: ensure they can receive remote audio
+    if (isHost) {
+      console.log('🎤 Mock: Host joined - unmuting audio by default');
+      this.streamState.isAudioMuted = false;
+    } else {
+      console.log('👂 Mock: Audience member joined - remote audio subscription enabled');
+      // In mock, we simulate that remote audio is available
+      // The mock participants will be added below
+    }
     
     // Add some mock participants
     this.addMockParticipants();

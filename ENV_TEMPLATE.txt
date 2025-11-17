@@ -1,0 +1,11 @@
+# Copy this content to a .env file in the root directory
+# Replace the placeholder values with your actual Agora credentials
+
+EXPO_PUBLIC_AGORA_APP_ID=your-agora-app-id-here
+EXPO_PUBLIC_AGORA_APP_CERTIFICATE=your-agora-app-certificate-here
+EXPO_PUBLIC_AGORA_CUSTOMER_ID=your-agora-customer-id-here
+EXPO_PUBLIC_AGORA_CUSTOMER_SECRET=your-agora-customer-secret-here
+EXPO_PUBLIC_ENABLE_VIDEO_STREAMING=false
+EXPO_PUBLIC_DEFAULT_STREAM_PROFILE=AUDIO_ONLY
+EXPO_PUBLIC_MAX_PARTICIPANTS_PER_STREAM=50
+

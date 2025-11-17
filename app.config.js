@@ -38,7 +38,23 @@ export default ({ config }) => ({
   web: {
     favicon: "./assets/favicon.png"
   },
-  plugins: [],
+  plugins: [
+    [
+      "expo-build-properties",
+      {
+        ios: {
+          useFrameworks: "static"
+        },
+        android: {
+          packagingOptions: {
+            pickFirst: [
+              "**/libc++_shared.so"
+            ]
+          }
+        }
+      }
+    ]
+  ],
   scheme: "vulu",
   experiments: {
     tsconfigPaths: true

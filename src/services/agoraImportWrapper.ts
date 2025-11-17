@@ -4,7 +4,11 @@
  */
 
 // Check if we're in Expo Go environment
-const isExpoGo = __DEV__ && typeof global.RNAgora === 'undefined';
+// Expo Go doesn't support custom native modules like react-native-agora
+const isExpoGo = 
+  typeof global.Expo !== 'undefined' && 
+  (global.Expo.Constants?.executionEnvironment === 'storeClient' || 
+   global.Expo.Constants?.executionEnvironment === 'bare');
 
 // Mock implementations for when Agora SDK is not available
 const mockAgoraExports = {
@@ -137,38 +141,55 @@ const mockAgoraExports = {
 
 // Safe import function
 let agoraExports: any = mockAgoraExports;
+let usingRealSDK = false;
 
+// Try to import the real Agora SDK
+// Only skip if we're definitely in Expo Go (which doesn't support native modules)
 if (!isExpoGo) {
   try {
-    // Try to import the real Agora SDK
-    agoraExports = require('react-native-agora');
-    console.log('✅ Real Agora SDK imported successfully');
-  } catch (error) {
-    console.warn('⚠️ Agora SDK not available, using mock exports:', error.message);
+    // Try to require the real Agora SDK
+    const agoraModule = require('react-native-agora');
+    
+    // Verify that RtcEngine is actually available (not just the module)
+    if (agoraModule && agoraModule.RtcEngine && typeof agoraModule.RtcEngine.create === 'function') {
+      agoraExports = agoraModule;
+      usingRealSDK = true;
+      console.log('✅ Real Agora SDK imported and verified successfully');
+    } else {
+      console.warn('⚠️ Agora SDK module found but RtcEngine is not available - using mock');
+      agoraExports = mockAgoraExports;
+    }
+  } catch (error: any) {
+    // Module not found or not linked - this is expected in Expo Go or if native modules aren't built
+    if (error.code === 'MODULE_NOT_FOUND' || error.message?.includes('Cannot find module')) {
+      console.log('🎭 Agora SDK native module not found - using mock (this is normal in Expo Go or before native build)');
+    } else {
+      console.warn('⚠️ Error importing Agora SDK, using mock:', error.message);
+    }
     agoraExports = mockAgoraExports;
   }
 } else {
-  console.log('🎭 Using mock Agora exports for Expo Go development');
+  console.log('🎭 Expo Go detected - using mock Agora exports (native modules not supported in Expo Go)');
 }
 
 // Export all Agora types and classes
 export default agoraExports.default;
 export const RtcEngine = agoraExports.RtcEngine;
 export const RtcEngineEvents = agoraExports.RtcEngineEvents;
-export const ChannelProfile = agoraExports.ChannelProfile;
-export const ClientRole = agoraExports.ClientRole;
-export const AudioProfile = agoraExports.AudioProfile;
-export const AudioScenario = agoraExports.AudioScenario;
-export const VideoEncoderConfiguration = agoraExports.VideoEncoderConfiguration;
-export const ConnectionStateType = agoraExports.ConnectionStateType;
-export const ConnectionChangedReason = agoraExports.ConnectionChangedReason;
-export const UserOfflineReason = agoraExports.UserOfflineReason;
-export const ErrorCode = agoraExports.ErrorCode;
-export const WarningCode = agoraExports.WarningCode;
+export const ChannelProfile = agoraExports.ChannelProfile || mockAgoraExports.ChannelProfile;
+export const ClientRole = agoraExports.ClientRole || mockAgoraExports.ClientRole;
+export const AudioProfile = agoraExports.AudioProfile || mockAgoraExports.AudioProfile;
+export const AudioScenario = agoraExports.AudioScenario || mockAgoraExports.AudioScenario;
+export const VideoEncoderConfiguration = agoraExports.VideoEncoderConfiguration || mockAgoraExports.VideoEncoderConfiguration;
+export const ConnectionStateType = agoraExports.ConnectionStateType || mockAgoraExports.ConnectionStateType;
+export const ConnectionChangedReason = agoraExports.ConnectionChangedReason || mockAgoraExports.ConnectionChangedReason;
+export const UserOfflineReason = agoraExports.UserOfflineReason || mockAgoraExports.UserOfflineReason;
+export const ErrorCode = agoraExports.ErrorCode || mockAgoraExports.ErrorCode;
+export const WarningCode = agoraExports.WarningCode || mockAgoraExports.WarningCode;
 
 // Export utility functions
-export const isAgoraAvailable = () => !isExpoGo && agoraExports.default !== null;
-export const isUsingMockAgora = () => isExpoGo || agoraExports.default === null;
+export const isAgoraAvailable = () => usingRealSDK && agoraExports.RtcEngine !== null && agoraExports.RtcEngine !== undefined;
+export const isUsingMockAgora = () => !usingRealSDK;
 
 // Log the current state
 console.log(`🔧 Agora Import Wrapper: ${isUsingMockAgora() ? 'Using Mock' : 'Using Real SDK'}`);

@@ -85,6 +85,7 @@ class AgoraService {
   private currentToken: string | null = null;
   private tokenExpiresAt: number = 0;
   private isUsingMockService = isUsingMockAgora();
+  private currentIsHost: boolean = false; // Track if current user is host
 
   private constructor() {
     this.streamState = {
@@ -211,11 +212,40 @@ class AgoraService {
     });
 
     // Join channel success
-    this.rtcEngine.addListener('JoinChannelSuccess', (channel: string, uid: number, elapsed: number) => {
+    this.rtcEngine.addListener('JoinChannelSuccess', async (channel: string, uid: number, elapsed: number) => {
       console.log(`✅ Successfully joined channel: ${channel} with UID: ${uid}`);
       this.streamState.isJoined = true;
       this.streamState.channelName = channel;
       this.streamState.localUid = uid;
+      
+      // Use the stored isHost flag (set during joinChannel)
+      const isHost = this.currentIsHost;
+      
+      // For hosts: ensure audio is unmuted by default
+      // For audience: ensure remote audio subscription is enabled (should be automatic, but ensure it)
+      if (isHost) {
+        console.log('🎤 Host joined - ensuring audio is unmuted');
+        // Unmute host audio by default
+        try {
+          await this.muteLocalAudio(false);
+        } catch (error) {
+          console.warn('⚠️ Failed to unmute host audio:', error);
+        }
+      } else {
+        console.log('👂 Audience member joined - remote audio subscription should be automatic');
+        // In Live Broadcasting mode, audience members automatically subscribe to remote audio
+        // But we can explicitly ensure it's enabled (though it should be by default)
+        // Note: muteAllRemoteAudioStreams(false) ensures all remote audio is unmuted
+        try {
+          if (typeof this.rtcEngine.muteAllRemoteAudioStreams === 'function') {
+            await this.rtcEngine.muteAllRemoteAudioStreams(false);
+            console.log('✅ Ensured remote audio subscription is enabled for audience');
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to ensure remote audio subscription:', error);
+        }
+      }
+      
       this.eventCallbacks.onJoinChannelSuccess?.(channel, uid, elapsed);
     });
 
@@ -388,6 +418,9 @@ class AgoraService {
 
       console.log(`🔄 Joining channel: ${channelName} as ${isHost ? 'host' : 'audience'}`);
 
+      // Store isHost flag for use in join success callback
+      this.currentIsHost = isHost;
+
       // Generate UID from userId (consistent hash)
       const uid = this.generateUidFromUserId(userId);
 
@@ -404,6 +437,19 @@ class AgoraService {
       // Set client role for real Agora SDK
       const clientRole = isHost ? ClientRole.Broadcaster : ClientRole.Audience;
       await this.rtcEngine.setClientRole(clientRole);
+      
+      // For audience members, ensure remote audio subscription is enabled
+      // (In Live Broadcasting mode, this should be automatic, but we ensure it)
+      if (!isHost) {
+        try {
+          if (typeof this.rtcEngine.muteAllRemoteAudioStreams === 'function') {
+            await this.rtcEngine.muteAllRemoteAudioStreams(false);
+            console.log('✅ Ensured remote audio subscription enabled for audience member');
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to ensure remote audio subscription:', error);
+        }
+      }
 
       // Generate or use provided token
       let token = providedToken;
@@ -457,6 +503,7 @@ class AgoraService {
       this.streamState.participants.clear();
       this.currentToken = null;
       this.tokenExpiresAt = 0;
+      this.currentIsHost = false;
 
       console.log('✅ Successfully left channel');
 
