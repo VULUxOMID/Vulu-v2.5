@@ -92,6 +92,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -138,6 +139,12 @@ export default function RootLayout() {
   // Set up additional crash prevention
   useEffect(() => {
     setupGlobalErrorHandling();
+    
+    // Setup iOS error suppression for system/simulator errors
+    if (Platform.OS === 'ios') {
+      const { setupIOSErrorSuppression } = require('../src/utils/iosErrorSuppressor');
+      setupIOSErrorSuppression();
+    }
   }, []);
 
   if (!loaded) {

@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  SafeAreaView,
   StatusBar,
   Switch,
   Modal,
@@ -15,6 +14,7 @@ import {
   Platform,
   Linking,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { PURPLE } from '../constants/colors';

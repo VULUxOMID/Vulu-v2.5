@@ -172,13 +172,24 @@ class MockAgoraService {
     // Simulate initialization delay
     await new Promise(resolve => setTimeout(resolve, 500));
     
+    // Store reference to this for use in engine methods
+    const self = this;
+    
     this.engine = {
       // Mock engine methods
       destroy: () => Promise.resolve(),
       joinChannel: () => Promise.resolve(0),
       leaveChannel: () => Promise.resolve(0),
-      muteLocalAudioStream: () => Promise.resolve(0),
-      muteLocalVideoStream: () => Promise.resolve(0),
+      muteLocalAudioStream: (muted: boolean) => {
+        console.log('🎭 Mock Agora Engine: muteLocalAudioStream called with:', muted);
+        self.streamState.isAudioMuted = muted;
+        return Promise.resolve(0);
+      },
+      muteLocalVideoStream: (muted: boolean) => {
+        console.log('🎭 Mock Agora Engine: muteLocalVideoStream called with:', muted);
+        self.streamState.isVideoMuted = muted;
+        return Promise.resolve(0);
+      },
       setChannelProfile: () => Promise.resolve(0),
       setClientRole: () => Promise.resolve(0),
       enableAudioVolumeIndication: () => Promise.resolve(0),
@@ -195,6 +206,15 @@ class MockAgoraService {
     isHost: boolean = false
   ): Promise<void> {
     console.log('🎭 Mock Agora: Joining channel:', channelName, 'as', isHost ? 'host' : 'audience');
+    
+    // First, set state to connecting
+    this.streamState.connectionState = ConnectionStateType.Connecting;
+    if (this.callbacks.onConnectionStateChanged) {
+      this.callbacks.onConnectionStateChanged(
+        ConnectionStateType.Connecting,
+        ConnectionChangedReason.Connecting
+      );
+    }
     
     // Simulate join delay
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -213,7 +233,7 @@ class MockAgoraService {
       this.callbacks.onJoinChannelSuccess(channelName, uid, 1000);
     }
     
-    // Simulate connection state change
+    // Simulate connection state change to connected
     if (this.callbacks.onConnectionStateChanged) {
       this.callbacks.onConnectionStateChanged(
         ConnectionStateType.Connected,

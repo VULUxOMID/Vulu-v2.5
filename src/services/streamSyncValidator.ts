@@ -121,9 +121,14 @@ export class StreamSyncValidator {
       console.log(`  Local: ${localStreamId}`);
       console.log(`  Server: ${serverStreamId}`);
       
-      // Check for discrepancies
+      // Check for discrepancies (only log if significant mismatch, not test data)
       if (localStreamId !== serverStreamId) {
-        console.warn(`⚠️ Stream state mismatch detected for user ${userId}`);
+        // Check if this is test data (starts with 'test-')
+        const isTestData = serverStreamId?.startsWith('test-') || localStreamId?.startsWith('test-');
+        
+        if (!isTestData) {
+          console.warn(`⚠️ Stream state mismatch detected for user ${userId}`);
+        }
         await this.resolveStreamStateMismatch(userId, localStreamId, serverStreamId);
       }
       

@@ -970,12 +970,22 @@ class StreamingService {
         isBanned: false // TODO: Implement ban functionality
       }));
 
-    // Calculate actual viewer count from participants
+    // Calculate actual viewer count from participants (exclude hosts)
     const actualViewerCount = viewers.length;
+    const actualParticipantCount = participants.length;
 
-    // Log if there's a discrepancy
-    if (session.viewerCount !== actualViewerCount) {
-      console.warn(`⚠️ Viewer count mismatch for stream ${session.id}: stored=${session.viewerCount}, actual=${actualViewerCount}`);
+    // Sync viewer count if there's a discrepancy (use actual count as source of truth)
+    const storedViewerCount = session.viewerCount;
+    if (storedViewerCount !== actualViewerCount) {
+      const discrepancy = Math.abs(storedViewerCount - actualViewerCount);
+      
+      // Only log if discrepancy is significant (>1) to reduce noise
+      if (discrepancy > 1) {
+        console.warn(`⚠️ Viewer count mismatch for stream ${session.id}: stored=${storedViewerCount}, actual=${actualViewerCount}. Syncing...`);
+      }
+      
+      // Update the session's viewer count to match actual count (source of truth)
+      session.viewerCount = actualViewerCount;
     }
 
     return {
@@ -983,7 +993,7 @@ class StreamingService {
       title: session.title,
       hosts,
       viewers,
-      views: actualViewerCount, // Use actual count from participants
+      views: actualViewerCount, // Use actual count from participants (source of truth)
       isActive: session.isActive,
       startedAt: StreamingService.convertTimestampToNumber(session.startedAt)
     };

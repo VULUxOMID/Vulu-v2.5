@@ -76,6 +76,7 @@ const LiveStreamViewSimple = () => {
 
   // Refs
   const chatListRef = useRef<FlatList>(null);
+  const permissionsInitializedRef = useRef(false); // Track if permissions have been initialized
 
   // Determine role (hosts need mic; viewers don't)
   const isHost = useMemo(() => {
@@ -95,12 +96,21 @@ const LiveStreamViewSimple = () => {
   // Agora configuration
   const isAgoraEnabled = isAgoraConfigured();
 
-  // Initialize permissions on component mount
+  // Initialize permissions on component mount (only once)
   useEffect(() => {
+    // Prevent re-initialization if already done (handles app state changes)
+    if (permissionsInitializedRef.current) {
+      console.log('🔄 LiveStreamViewSimple: Permissions already initialized, skipping');
+      return;
+    }
+
     console.log('🔄 LiveStreamViewSimple: Permission initialization useEffect triggered');
 
     const initPermissions = async () => {
       try {
+        // Mark as initialized immediately to prevent duplicate calls
+        permissionsInitializedRef.current = true;
+
         console.log('🔄 Initializing permissions for live stream...');
 
         // Initialize permission service
@@ -145,6 +155,8 @@ const LiveStreamViewSimple = () => {
         console.error('❌ Permission initialization failed:', error);
         // Don't block - allow user to proceed even if permission check fails
         setPermissionsGranted(true);
+        // Reset flag on error so it can retry if needed
+        permissionsInitializedRef.current = false;
       }
     };
 
@@ -185,6 +197,8 @@ const LiveStreamViewSimple = () => {
   useEffect(() => {
     return () => {
       console.log('🧹 Component unmounting - cleaning up mini player');
+      // Reset permission initialization flag on unmount so it can re-initialize if component remounts
+      permissionsInitializedRef.current = false;
       hideMiniPlayer();
     };
   }, []); // Empty dependency array - only run on mount/unmount

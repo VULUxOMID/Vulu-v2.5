@@ -7,13 +7,15 @@
 import { SMSVerificationResult, CodeVerificationResult } from './smsVerificationService';
 import { Buffer } from 'buffer';
 
-// Debug environment variables (development only)
-if (process.env.NODE_ENV === 'development') {
+// Debug environment variables (development only, throttled to once per session)
+let twilioDebugLogged = false;
+if (process.env.NODE_ENV === 'development' && !twilioDebugLogged) {
   console.log('🔍 Twilio Environment Variables Debug:');
   console.log('  EXPO_PUBLIC_TWILIO_ACCOUNT_SID:', process.env.EXPO_PUBLIC_TWILIO_ACCOUNT_SID ? 'SET' : 'MISSING');
   console.log('  EXPO_PUBLIC_TWILIO_API_KEY_SID:', process.env.EXPO_PUBLIC_TWILIO_API_KEY_SID ? 'SET' : 'MISSING');
   console.log('  EXPO_PUBLIC_TWILIO_API_KEY_SECRET:', process.env.EXPO_PUBLIC_TWILIO_API_KEY_SECRET ? 'SET' : 'MISSING');
   console.log('  EXPO_PUBLIC_TWILIO_FROM_NUMBER:', process.env.EXPO_PUBLIC_TWILIO_FROM_NUMBER || 'MISSING');
+  twilioDebugLogged = true;
 }
 
 // Twilio configuration with API Key support
@@ -35,7 +37,7 @@ const TWILIO_CONFIG = {
   baseUrl: 'https://api.twilio.com/2010-04-01',
 };
 
-if (process.env.NODE_ENV === 'development') {
+if (process.env.NODE_ENV === 'development' && !twilioDebugLogged) {
   console.log('📱 Twilio Config Loaded:');
   console.log('  Account SID:', TWILIO_CONFIG.accountSid.substring(0, 10) + '...');
   console.log('  API Key SID:', TWILIO_CONFIG.apiKeySid ? TWILIO_CONFIG.apiKeySid.substring(0, 10) + '...' : 'MISSING');

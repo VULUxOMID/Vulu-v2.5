@@ -98,12 +98,17 @@ export const AgoraStreamView: React.FC<AgoraStreamViewProps> = ({
     }
   );
 
-  // Performance optimization
+  // Performance optimization with reduced logging
+  const lastPerformanceLogRef = useRef<{ score: number; time: number }>({ score: 0, time: 0 });
   const performance = usePerformanceOptimization({
     enableAutoOptimization: true,
-    monitoringInterval: 5000,
+    monitoringInterval: 10000, // Increased from 5000 to 10000ms (10 seconds)
     onPerformanceAlert: (alert) => {
-      console.warn(`⚠️ [AGORA_VIEW] Performance alert: ${alert.message}`);
+      // Only log critical alerts, throttle warnings
+      if (alert.severity === 'critical') {
+        console.warn(`⚠️ [AGORA_VIEW] Performance alert: ${alert.message}`);
+      }
+      // Suppress warning-level alerts in production
     },
     onOptimizationApplied: (settings) => {
       console.log('⚡ [AGORA_VIEW] Optimization applied:', settings);
@@ -114,7 +119,16 @@ export const AgoraStreamView: React.FC<AgoraStreamViewProps> = ({
       }
     },
     onPerformanceScoreChange: (score) => {
-      console.log(`📊 [AGORA_VIEW] Performance score: ${score}`);
+      // Only log performance score if it changes significantly (>10 points) or every 30 seconds
+      const now = Date.now();
+      const lastLog = lastPerformanceLogRef.current;
+      const scoreDiff = Math.abs(score - lastLog.score);
+      const timeDiff = now - lastLog.time;
+      
+      if (scoreDiff > 10 || timeDiff > 30000) {
+        console.log(`📊 [AGORA_VIEW] Performance score: ${score}`);
+        lastPerformanceLogRef.current = { score, time: now };
+      }
     },
   });
 

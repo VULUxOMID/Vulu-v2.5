@@ -1,4 +1,4 @@
-import { Audio } from 'expo-audio';
+import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
@@ -113,14 +113,18 @@ class PermissionService {
 
   private async checkCurrentPermissions(): Promise<void> {
     try {
-
-
-      // Check microphone permission
+      // Check microphone permission using expo-av Audio API
+      // This will properly check iOS microphone permissions
       const audioStatus = await Audio.getPermissionsAsync();
       this.permissionState.microphone = audioStatus.status === 'granted';
+      console.log('🎤 Current microphone permission status:', {
+        status: audioStatus.status,
+        granted: audioStatus.granted,
+        canAskAgain: audioStatus.canAskAgain
+      });
     } catch (error) {
       const safeMessage = error instanceof Error ? error.message : String(error);
-      console.warn('⚠️ Error checking current permissions (likely Expo Go):', safeMessage);
+      console.warn('⚠️ Error checking current permissions:', safeMessage);
       this.permissionState.microphone = false;
     }
   }
@@ -133,11 +137,36 @@ class PermissionService {
     }
 
     try {
+      // Check current status first
+      const currentStatus = await Audio.getPermissionsAsync();
+      console.log('📋 Current microphone permission status before request:', {
+        status: currentStatus.status,
+        granted: currentStatus.granted,
+        canAskAgain: currentStatus.canAskAgain
+      });
 
+      // If already granted, update state and return
+      if (currentStatus.status === 'granted' || currentStatus.granted === true) {
+        console.log('✅ Microphone permission already granted');
+        this.permissionState.microphone = true;
+        this.permissionState.hasRequestedThisSession = true;
+        this.permissionState.lastRequestTime = Date.now();
+        await this.storePermissionState();
+        return this.permissionState;
+      }
 
-      // Request microphone permission
+      // Request microphone permission - this will show iOS native dialog if status is 'undetermined'
+      // iOS will show the system dialog with "Allow" and "Don't Allow" options
+      console.log('🎤 Requesting microphone permission - iOS will show native dialog if needed...');
       const audioResult = await Audio.requestPermissionsAsync();
-      this.permissionState.microphone = audioResult.status === 'granted';
+      
+      console.log('📋 Permission request result:', {
+        status: audioResult.status,
+        granted: audioResult.granted,
+        canAskAgain: audioResult.canAskAgain
+      });
+
+      this.permissionState.microphone = audioResult.status === 'granted' || audioResult.granted === true;
 
       // Update session state
       this.permissionState.hasRequestedThisSession = true;
@@ -146,10 +175,16 @@ class PermissionService {
       // Store the permission state
       await this.storePermissionState();
 
+      if (this.permissionState.microphone) {
+        console.log('✅ Microphone permission granted by user');
+      } else {
+        console.log('❌ Microphone permission denied by user');
+      }
+
       return this.permissionState;
     } catch (error) {
       const safeMessage = error instanceof Error ? error.message : String(error);
-      console.warn('⚠️ Error requesting permissions (likely Expo Go):', safeMessage);
+      console.warn('⚠️ Error requesting permissions:', safeMessage);
       this.permissionState.microphone = false;
       this.permissionState.hasRequestedThisSession = true;
       this.permissionState.lastRequestTime = Date.now();

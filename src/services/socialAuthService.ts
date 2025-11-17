@@ -46,7 +46,10 @@ class SocialAuthService {
       const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 
       if (!webClientId || !iosClientId) {
-        console.warn('Google OAuth client IDs not configured. Please set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID and EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID environment variables.');
+        // Only warn in development mode to reduce production noise
+        if (__DEV__) {
+          console.warn('Google OAuth client IDs not configured. Please set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID and EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID environment variables.');
+        }
         this.isGoogleConfigured = false;
         return;
       }
