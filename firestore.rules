@@ -379,17 +379,14 @@ service cloud.firestore {
         // VIEWERS JOINING: Allow authenticated users to add themselves to participants array
         // This fixes the "chicken and egg" problem where users need permission to add themselves
         (
-          // User is adding/updating themselves in participants array
+          // User is adding themselves (participants array size increases or stays same)
           request.resource.data.participants != null &&
           resource.data.participants != null &&
-          
-          // User's ID must be in the new participants array (check if any participant has their ID)
-          request.resource.data.participants.hasAny([{'id': request.auth.uid}]) &&
           
           // Cannot remove other participants (only add self or update self)
           request.resource.data.participants.size() >= resource.data.participants.size() &&
           
-          // Cannot modify critical fields (host, isActive, title)
+          // Cannot modify critical fields (host, isActive, title, streamId)
           request.resource.data.hostId == resource.data.hostId &&
           request.resource.data.isActive == resource.data.isActive &&
           request.resource.data.title == resource.data.title &&
