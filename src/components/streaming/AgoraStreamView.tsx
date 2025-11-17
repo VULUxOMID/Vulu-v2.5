@@ -277,6 +277,32 @@ export const AgoraStreamView: React.FC<AgoraStreamViewProps> = ({
         }
       });
 
+      // If we're already joined to this stream (e.g., coming back from another screen),
+      // just sync local state and skip another join attempt.
+      const existingState = agoraService.getStreamState();
+      const alreadyJoined = existingState.isJoined && existingState.channelName === streamId;
+      if (alreadyJoined) {
+        console.log('♻️ [AGORA_VIEW] Already joined this channel, syncing state without rejoining');
+        const participants = agoraService.getParticipants();
+        setStreamState(prev => ({
+          ...prev,
+          isConnecting: false,
+          isConnected: true,
+          isJoined: true,
+          error: null,
+          participants,
+          localControls: {
+            ...prev.localControls,
+            isAudioMuted: existingState.isAudioMuted,
+            isVideoEnabled: existingState.isVideoEnabled,
+          },
+        }));
+        onConnectionStateChange?.('connected');
+        onJoinSuccess?.();
+        onParticipantUpdate?.(participants);
+        return;
+      }
+
       // Join the channel
       const joined = await agoraService.joinChannel(streamId, userId, isHost);
       if (!joined) {
@@ -325,7 +351,7 @@ export const AgoraStreamView: React.FC<AgoraStreamViewProps> = ({
       recovery.handleError(error);
       onError?.(errorMessage);
     }
-  }, [streamId, userId, isHost, isConfigured, onConnectionStateChange, onError, onJoinSuccess, onLeaveSuccess]);
+  }, [streamId, userId, isHost, isConfigured, onConnectionStateChange, onError, onJoinSuccess, onLeaveSuccess, onParticipantUpdate]);
 
   // Update participants from Agora service
   const updateParticipants = useCallback(() => {

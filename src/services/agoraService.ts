@@ -85,7 +85,12 @@ class AgoraService {
   private streamState: AgoraStreamState;
   private config = getAgoraConfig();
   private eventCallbacks: AgoraEventCallbacks = {};
-  private joinChannelPromise: { resolve: (value: boolean) => void; reject: (error: any) => void; timeout: NodeJS.Timeout } | null = null;
+  private joinChannelPromise: {
+    channelName: string;
+    uid: number;
+    timeout: NodeJS.Timeout;
+    listeners: Array<{ resolve: (value: boolean) => void; reject: (error: any) => void }>;
+  } | null = null;
   private currentToken: string | null = null;
   private tokenExpiresAt: number = 0;
   private isUsingMockService = isUsingMockAgora();
@@ -155,33 +160,41 @@ class AgoraService {
       console.log('🔄 Initializing Agora RTC Engine...');
 
       // Create RTC Engine instance
-      // For v4.5.3+, createAgoraRtcEngine may need a config object
+      // For v4.5.3+, createAgoraRtcEngine() returns an engine that must be initialized manually
+      let usingNewAPI = false;
       try {
-        // Try with config object first (new API)
-        this.rtcEngine = await RtcEngine.create({ appId: this.config.appId });
-        console.log('✅ Engine created with config object');
+        this.rtcEngine = await RtcEngine.create();
+        usingNewAPI = typeof this.rtcEngine?.initialize === 'function';
+        console.log('✅ Engine instance created (new API)');
       } catch (error) {
-        // Fallback to string appId (old API)
-        console.log('⚠️ Config object failed, trying string appId...');
+        console.log('⚠️ New API create() failed, trying legacy create(appId)...', error?.message || error);
         this.rtcEngine = await RtcEngine.create(this.config.appId);
-        console.log('✅ Engine created with string appId');
+        usingNewAPI = false;
+        console.log('✅ Engine created with legacy API');
       }
 
-      // Wait for engine to be fully ready (some APIs may return -7 ERR_NOT_READY immediately after creation)
-      // The engine needs time to initialize - 1 second should be sufficient
+      // Initialize engine for new API
+      if (usingNewAPI) {
+        console.log('🔧 Calling rtcEngine.initialize with appId');
+        await this.rtcEngine.initialize({
+          appId: this.config.appId,
+        });
+      }
+
+      // Small delay to allow engine to finish bootstrapping
       console.log('⏳ Waiting for engine to be ready...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 500));
       console.log('✅ Engine ready delay completed');
 
-      // Debug: Log available methods and enum values
-      console.log('🔍 Engine methods:', Object.keys(this.rtcEngine).filter(k => typeof this.rtcEngine[k] === 'function').slice(0, 10).join(', '));
+      // Debug: Log available methods and enum values (best effort)
+      try {
+        console.log('🔍 Engine methods:', Object.keys(this.rtcEngine).filter(k => typeof this.rtcEngine[k] === 'function').slice(0, 10).join(', '));
+      } catch (_) {
+        console.log('🔍 Engine methods unavailable (non-enumerable)');
+      }
       console.log('🔍 ChannelProfile enum:', ChannelProfile);
       console.log('🔍 AudioProfile enum:', AudioProfile);
       console.log('🔍 AudioScenario enum:', AudioScenario);
-
-      // In v4.5.3+, createAgoraRtcEngine already initializes the engine
-      // Don't call initialize() - it's not needed and returns -2
-      // The engine is ready to use after a brief delay
 
       // Set channel profile for live broadcasting
       // Use numeric value directly: LiveBroadcasting = 1
@@ -355,9 +368,7 @@ class AgoraService {
           console.log(`✅ Resolving join promise via ConnectionStateChanged fallback: channel=${channelName}, uid=${uid}`);
           
           this.streamState.isJoined = true;
-          clearTimeout(this.joinChannelPromise.timeout);
-          this.joinChannelPromise.resolve(true);
-          this.joinChannelPromise = null;
+          this.resolvePendingJoin(true);
           
           // Trigger the onJoinChannelSuccess callback for consistency
           this.eventCallbacks.onJoinChannelSuccess?.(channelName, uid, 0);
@@ -382,9 +393,7 @@ class AgoraService {
       // Resolve the join promise if it exists
       if (this.joinChannelPromise) {
         console.log('✅ Resolving join promise via JoinChannelSuccess callback');
-        clearTimeout(this.joinChannelPromise.timeout);
-        this.joinChannelPromise.resolve(true);
-        this.joinChannelPromise = null;
+        this.resolvePendingJoin(true);
       }
       
       // Use the stored isHost flag (set during joinChannel)
@@ -428,9 +437,7 @@ class AgoraService {
           this.streamState.isJoined = true;
           this.streamState.channelName = channel;
           this.streamState.localUid = uid;
-          clearTimeout(this.joinChannelPromise.timeout);
-          this.joinChannelPromise.resolve(true);
-          this.joinChannelPromise = null;
+          this.resolvePendingJoin(true);
           this.eventCallbacks.onJoinChannelSuccess?.(channel, uid, elapsed);
         }
       });
@@ -456,9 +463,7 @@ class AgoraService {
       if (this.joinChannelPromise && (errorCode === -5 || errorCode === -17 || errorCode < 0)) {
         const errorMsg = `Join channel failed with error code: ${errorCode}`;
         console.error(`❌ ${errorMsg}`);
-        clearTimeout(this.joinChannelPromise.timeout);
-        this.joinChannelPromise.reject(new Error(errorMsg));
-        this.joinChannelPromise = null;
+        this.rejectPendingJoin(new Error(errorMsg));
       }
       
       this.eventCallbacks.onError?.(errorCode);
@@ -595,6 +600,62 @@ class AgoraService {
   }
 
   /**
+   * Attach to an in-flight join attempt
+   */
+  private attachToPendingJoin(): Promise<boolean> {
+    return new Promise<boolean>((resolve, reject) => {
+      if (!this.joinChannelPromise) {
+        resolve(this.streamState.isJoined);
+        return;
+      }
+
+      this.joinChannelPromise.listeners.push({ resolve, reject });
+    });
+  }
+
+  /**
+   * Resolve the pending join promise (and all attached listeners)
+   */
+  private resolvePendingJoin(result: boolean = true): void {
+    if (!this.joinChannelPromise) {
+      return;
+    }
+
+    const pending = this.joinChannelPromise;
+    clearTimeout(pending.timeout);
+    this.joinChannelPromise = null;
+
+    pending.listeners.forEach(listener => {
+      try {
+        listener.resolve(result);
+      } catch (error) {
+        console.warn('⚠️ Error resolving join listener:', error);
+      }
+    });
+  }
+
+  /**
+   * Reject the pending join promise (and all attached listeners)
+   */
+  private rejectPendingJoin(error: any): void {
+    if (!this.joinChannelPromise) {
+      return;
+    }
+
+    const pending = this.joinChannelPromise;
+    clearTimeout(pending.timeout);
+    this.joinChannelPromise = null;
+
+    pending.listeners.forEach(listener => {
+      try {
+        listener.reject(error);
+      } catch (listenerError) {
+        console.warn('⚠️ Error rejecting join listener:', listenerError);
+      }
+    });
+  }
+
+  /**
    * Simplified: Join a streaming channel
    * No complex retries, timeouts, or validations - just join
    */
@@ -617,13 +678,70 @@ class AgoraService {
         throw new Error('RTC Engine not initialized');
       }
 
+      // Generate UID from userId up front (needed for duplicate detection)
+      const uid = this.generateUidFromUserId(userId);
+
+      // If another join is already pending, either attach to it (same channel) or wait for it to finish
+      if (this.joinChannelPromise) {
+        const pendingChannel = this.joinChannelPromise.channelName;
+        const pendingUid = this.joinChannelPromise.uid;
+
+        if (pendingChannel === channelName && pendingUid === uid) {
+          console.log('♻️ Join request already pending for this channel/uid, waiting for completion');
+          return this.attachToPendingJoin();
+        }
+
+        console.log(`⏳ Join already pending for ${pendingChannel}. Waiting before joining ${channelName}...`);
+        try {
+          await this.attachToPendingJoin();
+        } catch (pendingError: any) {
+          console.warn('⚠️ Previous join attempt failed while waiting:', pendingError?.message || pendingError);
+        }
+      }
+
+      // If we're already joined to this channel with the same UID, just reuse the session
+      if (this.streamState.isJoined) {
+        const sameChannel = this.streamState.channelName === channelName;
+        const sameUid = this.streamState.localUid === uid;
+
+        if (sameChannel && sameUid) {
+          console.log('♻️ Already joined target channel, reusing existing Agora session');
+          this.currentIsHost = isHost;
+
+          // Ensure client role/audio subscriptions align with latest request
+          const clientRole = isHost ? 1 : 2;
+          try {
+            if (this.rtcEngine && !this.isUsingMockService) {
+              await this.rtcEngine.setClientRole(clientRole);
+              if (!isHost && typeof this.rtcEngine.muteAllRemoteAudioStreams === 'function') {
+                await this.rtcEngine.muteAllRemoteAudioStreams(false);
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ Failed to refresh client role for existing session:', error);
+          }
+
+          // Notify listeners asynchronously so UI can sync state without triggering a new join
+          setTimeout(() => {
+            try {
+              this.eventCallbacks.onJoinChannelSuccess?.(channelName, uid, 0);
+            } catch (callbackError) {
+              console.warn('⚠️ Error in JoinChannelSuccess callback (reuse):', callbackError);
+            }
+          }, 0);
+
+          return true;
+        }
+
+        // Different channel/UID: leave first to avoid ERR_JOIN_CHANNEL_REJECTED (-17)
+        console.log(`ℹ️ Already joined ${this.streamState.channelName}, leaving before joining ${channelName}`);
+        await this.leaveChannel();
+      }
+
       console.log(`🔄 Joining channel: ${channelName} as ${isHost ? 'host' : 'audience'}`);
 
       // Store isHost flag
       this.currentIsHost = isHost;
-
-      // Generate UID from userId
-      const uid = this.generateUidFromUserId(userId);
 
       // Handle mock service
       if (this.isUsingMockService) {
@@ -665,13 +783,16 @@ class AgoraService {
       // Join channel - simple promise with 5 second timeout
       return new Promise<boolean>((resolve, reject) => {
         const timeout = setTimeout(() => {
-          if (this.joinChannelPromise) {
-            this.joinChannelPromise = null;
-          }
-          reject(new Error('Join channel timeout'));
+          console.error('⏰ Join channel timeout');
+          this.rejectPendingJoin(new Error('Join channel timeout'));
         }, 5000); // 5 second timeout (simplified from 15)
 
-        this.joinChannelPromise = { resolve, reject, timeout };
+        this.joinChannelPromise = {
+          channelName,
+          uid,
+          timeout,
+          listeners: [{ resolve, reject }],
+        };
 
         // Attempt join
         this.attemptJoinChannel(token, channelName, uid)
@@ -682,23 +803,18 @@ class AgoraService {
               console.log(`⏳ Join initiated (result: ${joinResult}), waiting for callback...`);
             } else {
               // Other error - fail immediately
-              clearTimeout(timeout);
-              this.joinChannelPromise = null;
-              reject(new Error(`Join failed with code: ${joinResult}`));
+              this.rejectPendingJoin(new Error(`Join failed with code: ${joinResult}`));
             }
           })
           .catch((error) => {
-            clearTimeout(timeout);
-            this.joinChannelPromise = null;
-            reject(error);
+            this.rejectPendingJoin(error);
           });
       });
 
     } catch (error: any) {
       console.error('❌ Failed to join channel:', error);
       if (this.joinChannelPromise) {
-        clearTimeout(this.joinChannelPromise.timeout);
-        this.joinChannelPromise = null;
+        this.rejectPendingJoin(error);
       }
       throw error; // Throw instead of returning false
     }

@@ -163,25 +163,13 @@ class StreamService {
     await setDoc(doc(db, 'streams', streamId), streamData);
     console.log(`✅ Stream created in Firebase: ${streamId}`);
 
-    // Join Agora channel (if configured)
-    if (isAgoraConfigured()) {
-      try {
-        await agoraService.initialize();
-        await agoraService.joinChannel(streamId, userId, true); // isHost = true
-        console.log(`✅ Host joined Agora channel: ${streamId}`);
-      } catch (error) {
-        console.error('⚠️ Agora join failed, continuing with Firebase-only:', error);
-        // Continue even if Agora fails
-      }
-    }
-
     this.currentStreamId = streamId;
     return streamId;
   }
 
   /**
    * Join an existing stream
-   * Simple: Update Firebase + Join Agora channel
+   * Simple: Update Firebase; Agora connection is handled by the UI layer
    */
   async joinStream(
     streamId: string,
@@ -241,18 +229,6 @@ class StreamService {
         updatedAt: serverTimestamp(),
         lastActivity: serverTimestamp()
       });
-    }
-
-    // Join Agora channel (if configured)
-    if (isAgoraConfigured()) {
-      try {
-        await agoraService.initialize();
-        await agoraService.joinChannel(streamId, userId, false); // isHost = false
-        console.log(`✅ Viewer joined Agora channel: ${streamId}`);
-      } catch (error) {
-        console.error('⚠️ Agora join failed, continuing with Firebase-only:', error);
-        // Continue even if Agora fails
-      }
     }
 
     this.currentStreamId = streamId;
