@@ -560,9 +560,37 @@ class AgoraService {
       }
 
       // Join the channel
-      await this.rtcEngine.joinChannel(token, channelName, null, uid);
+      // In v4.5.3+, the API signature changed
+      // Try new API: joinChannel(token, channelId, uid) - 3 parameters
+      let joinResult: number;
+      try {
+        // New API: joinChannel(token, channelId, uid)
+        joinResult = await this.rtcEngine.joinChannel(token, channelName, uid);
+        console.log(`✅ Joining channel initiated (new API): ${channelName} with UID: ${uid}, result: ${joinResult}`);
+      } catch (error: any) {
+        // Fallback to old API if new one fails
+        console.log('⚠️ New API failed, trying old API format...');
+        try {
+          // Old API: joinChannel(token, channelId, info, uid) - 4 parameters
+          joinResult = await this.rtcEngine.joinChannel(token, channelName, '', uid);
+          console.log(`✅ Joining channel initiated (old API): ${channelName} with UID: ${uid}, result: ${joinResult}`);
+        } catch (oldError: any) {
+          console.error('❌ Both API formats failed:', { newError: error, oldError });
+          throw oldError;
+        }
+      }
 
-      console.log(`✅ Joining channel initiated: ${channelName} with UID: ${uid}`);
+      // Check result code (0 = success, negative = error)
+      if (joinResult !== 0) {
+        console.warn(`⚠️ joinChannel returned non-zero result: ${joinResult}`);
+        // -2 is ERR_INVALID_ARGUMENT, -7 is ERR_NOT_READY
+        // -7 is non-critical (engine not ready yet), but -2 indicates a real problem
+        if (joinResult === -2) {
+          throw new Error(`Invalid arguments to joinChannel: result=${joinResult}`);
+        }
+        // For -7, we can continue as the engine will be ready when joining
+      }
+
       return true;
 
     } catch (error: any) {
