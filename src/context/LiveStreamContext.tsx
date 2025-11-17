@@ -229,7 +229,9 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
   // Handle app state changes for cleanup and Firestore error recovery
   useEffect(() => {
     const handleAppStateChange = (nextAppState: string) => {
-      if (nextAppState === 'background' || nextAppState === 'inactive') {
+      // Only treat 'background' as background, not 'inactive'
+      // 'inactive' can happen during transitions (like navigation) and shouldn't trigger cleanup
+      if (nextAppState === 'background') {
         console.log('📱 App going to background - cleaning up resources');
 
         // Emergency cleanup to prevent Firestore listener issues

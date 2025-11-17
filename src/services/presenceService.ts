@@ -617,10 +617,9 @@ export class PresenceService {
       } else if (nextAppState === 'background') {
         this.isActive = false;
         this.setUserAway();
-      } else if (nextAppState === 'inactive') {
-        this.isActive = false;
-        this.setUserOffline();
       }
+      // Don't treat 'inactive' as offline - it can happen during transitions (like navigation)
+      // Only 'background' should trigger away/offline status
     });
   }
 

@@ -118,17 +118,17 @@ const LiveStreamViewSimple = () => {
           if (!hasPermissions) {
             console.log('🔄 Requesting microphone permissions (host only)...');
             const result = await permissionService.requestPermissions();
-            setPermissionsGranted(result.microphone);
+            const micGranted = result.microphone;
 
             console.log('✅ Permission request result:', result);
 
-            if (!result.microphone) {
+            if (!micGranted) {
               console.log('❌ Microphone permission denied - but allowing user to continue');
               console.log('ℹ️ User can still go live, but audio won\'t work');
               // DON'T block the user - allow them to proceed even without permissions
               // They can still go live (audio just won't work)
-              setPermissionsGranted(false); // Set to false so audio features are disabled
-              // Continue execution - don't return or show blocking alert
+              // Set to true to allow UI to render, but audio features will be disabled
+              setPermissionsGranted(true);
             } else {
               console.log('✅ Microphone permission granted');
               setPermissionsGranted(true);
@@ -143,7 +143,8 @@ const LiveStreamViewSimple = () => {
         }
       } catch (error) {
         console.error('❌ Permission initialization failed:', error);
-        setPermissionsGranted(true); // don't block viewing
+        // Don't block - allow user to proceed even if permission check fails
+        setPermissionsGranted(true);
       }
     };
 
@@ -324,7 +325,8 @@ const LiveStreamViewSimple = () => {
           </TouchableOpacity>
 
           {/* Agora Audio Stream (Background) */}
-          {isAgoraEnabled && user && permissionsGranted && (
+          {/* Only enable Agora if permissions are actually granted (check permission service) */}
+          {isAgoraEnabled && user && permissionService.hasRequiredPermissions() && (
             <View style={styles.agoraContainer}>
               <AgoraStreamView
                 streamId={streamId}

@@ -204,7 +204,9 @@ class SessionService {
   private async handleAppStateChange(nextAppState: AppStateStatus): Promise<void> {
     if (!this.sessionData || !this.config.enableAutoLogout) return;
     
-    if (nextAppState === 'background' || nextAppState === 'inactive') {
+    // Only treat 'background' as background, not 'inactive'
+    // 'inactive' can happen during transitions (like navigation) and shouldn't trigger session expiration
+    if (nextAppState === 'background') {
       // App went to background
       this.sessionData.backgroundTime = Date.now();
       this.sessionData.isActive = false;
