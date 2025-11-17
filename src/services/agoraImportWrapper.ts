@@ -5,10 +5,11 @@
 
 // Check if we're in Expo Go environment
 // Expo Go doesn't support custom native modules like react-native-agora
+// executionEnvironment === 'storeClient' means Expo Go
+// executionEnvironment === 'bare' means bare React Native app (supports native modules)
 const isExpoGo = 
   typeof global.Expo !== 'undefined' && 
-  (global.Expo.Constants?.executionEnvironment === 'storeClient' || 
-   global.Expo.Constants?.executionEnvironment === 'bare');
+  global.Expo.Constants?.executionEnvironment === 'storeClient';
 
 // Mock implementations for when Agora SDK is not available
 const mockAgoraExports = {
@@ -145,15 +146,24 @@ let usingRealSDK = false;
 
 // Try to import the real Agora SDK
 // Only skip if we're definitely in Expo Go (which doesn't support native modules)
+// In bare React Native apps (executionEnvironment === 'bare'), native modules are available
+console.log('🔍 Environment check:', {
+  hasExpo: typeof global.Expo !== 'undefined',
+  executionEnvironment: typeof global.Expo !== 'undefined' ? global.Expo.Constants?.executionEnvironment : 'N/A',
+  isExpoGo
+});
+
 if (!isExpoGo) {
   try {
+    console.log('🔍 Attempting to import react-native-agora native module...');
     // Try to require the real Agora SDK
     const agoraModule = require('react-native-agora');
     
     // Debug: Log what we actually got from the module
     if (agoraModule) {
+      console.log('✅ Agora module loaded successfully!');
       console.log('🔍 Agora module loaded, checking exports...');
-      console.log('🔍 Module keys:', Object.keys(agoraModule).slice(0, 10).join(', '));
+      console.log('🔍 Module keys:', Object.keys(agoraModule).slice(0, 20).join(', '));
       
       // react-native-agora v4.5.3 uses createAgoraRtcEngine() instead of RtcEngine.create()
       const createAgoraRtcEngine = agoraModule.createAgoraRtcEngine;
