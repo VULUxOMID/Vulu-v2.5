@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLiveStreams, LiveStream } from '../context/LiveStreamContext';
 import { useAuth } from '../context/AuthContext';
-import { streamingService } from '../services/streamingService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PURPLE } from '../constants/colors';
 import { StreamErrorBoundary } from './StreamErrorBoundary';
@@ -370,70 +369,7 @@ const LiveStreamGrid = () => {
   
   // Handle "Go Live" button press with complete functionality
   const handleGoLive = async () => {
-    try {
-      console.log('🎥 Go Live button pressed');
-
-      // 1. FIXED: Proper authentication check - handle guest users appropriately
-      if (!user) {
-        // No user at all - redirect to authentication
-        console.log('❌ No user found, redirecting to sign-in');
-        Alert.alert(
-          'Sign In Required',
-          'You need to sign in to start a live stream.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Sign In',
-              onPress: () => {
-                console.log('🔄 Redirecting to authentication screen');
-                router.push('/auth/selection');
-              }
-            }
-          ]
-        );
-        return;
-      }
-
-      // 2. FIXED: Guest user upgrade flow - navigate directly to auth selection
-      if (isGuest) {
-        console.log('🎭 Guest user wants to go live - redirecting to auth selection');
-        router.push('/auth/selection');
-        return;
-      }
-
-      console.log('✅ User authenticated, proceeding to live stream setup');
-      console.log('👤 User info:', {
-        uid: user.uid,
-        displayName: user.displayName,
-        photoURL: user.photoURL
-      });
-
-      // 2. Validate user data before proceeding to setup
-      if (!user.uid) {
-        throw new Error('User ID is missing. Please sign in again.');
-      }
-
-      // 3. Navigate to live stream setup screen
-      console.log('🔄 Navigating to live stream setup screen');
-      router.push('/livestream-setup');
-      console.log('✅ Navigation to setup screen completed successfully');
-
-    } catch (error: any) {
-      console.error('❌ Navigation to setup failed:', error);
-
-      // Enhanced error handling with more specific messages
-      let errorMessage = 'An unexpected error occurred while opening the live stream setup.';
-
-      if (error.message) {
-        errorMessage = error.message;
-      }
-
-      Alert.alert(
-        'Setup Failed',
-        `Could not open live stream setup:\n\n${errorMessage}\n\nPlease try again.`,
-        [{ text: 'OK' }]
-      );
-    }
+    Alert.alert('Go Live', 'Live streaming is disabled.');
   };
 
   // Create button to start new stream
