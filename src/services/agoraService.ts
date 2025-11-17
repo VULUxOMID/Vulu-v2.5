@@ -147,20 +147,76 @@ class AgoraService {
       try {
         // Try with config object first (new API)
         this.rtcEngine = await RtcEngine.create({ appId: this.config.appId });
+        console.log('✅ Engine created with config object');
       } catch (error) {
         // Fallback to string appId (old API)
         console.log('⚠️ Config object failed, trying string appId...');
         this.rtcEngine = await RtcEngine.create(this.config.appId);
+        console.log('✅ Engine created with string appId');
+      }
+
+      // Debug: Log available methods and enum values
+      console.log('🔍 Engine methods:', Object.keys(this.rtcEngine).filter(k => typeof this.rtcEngine[k] === 'function').slice(0, 10).join(', '));
+      console.log('🔍 ChannelProfile enum:', ChannelProfile);
+      console.log('🔍 AudioProfile enum:', AudioProfile);
+      console.log('🔍 AudioScenario enum:', AudioScenario);
+
+      // In v4.5.3+, the engine might need initialize() to be called after create()
+      if (typeof this.rtcEngine.initialize === 'function') {
+        console.log('🔄 Calling engine.initialize()...');
+        const initResult = await this.rtcEngine.initialize();
+        console.log('✅ Engine initialized, result:', initResult);
+      } else {
+        console.log('ℹ️ Engine does not have initialize() method - may already be initialized');
       }
 
       // Set channel profile for live broadcasting
-      await this.rtcEngine.setChannelProfile(ChannelProfile.LiveBroadcasting);
+      // Try both enum names (ChannelProfile and ChannelProfileType)
+      // LiveBroadcasting is typically value 1
+      const channelProfileValue = ChannelProfile?.LiveBroadcasting ?? ChannelProfile?.[1] ?? 1;
+      console.log('🔄 Setting channel profile to LiveBroadcasting, value:', channelProfileValue);
+      try {
+        const profileResult = await this.rtcEngine.setChannelProfile(channelProfileValue);
+        if (profileResult !== 0) {
+          console.warn('⚠️ setChannelProfile returned non-zero result:', profileResult);
+          // Try with numeric value 1 directly
+          console.log('🔄 Retrying with numeric value 1...');
+          const retryResult = await this.rtcEngine.setChannelProfile(1);
+          if (retryResult !== 0) {
+            console.warn('⚠️ setChannelProfile still failed with numeric 1:', retryResult);
+          } else {
+            console.log('✅ Channel profile set successfully with numeric value');
+          }
+        } else {
+          console.log('✅ Channel profile set successfully');
+        }
+      } catch (error) {
+        console.error('❌ Error setting channel profile:', error);
+      }
 
       // Configure audio settings for social streaming
-      await this.rtcEngine.setAudioProfile(
-        AudioProfile.MusicHighQuality,
-        AudioScenario.ChatRoomEntertainment
-      );
+      // MusicHighQuality is typically value 4, ChatRoomEntertainment is typically value 1
+      const audioProfileValue = AudioProfile?.MusicHighQuality ?? AudioProfile?.[4] ?? 4;
+      const audioScenarioValue = AudioScenario?.ChatRoomEntertainment ?? AudioScenario?.[1] ?? 1;
+      console.log('🔄 Setting audio profile:', { profile: audioProfileValue, scenario: audioScenarioValue });
+      try {
+        const audioResult = await this.rtcEngine.setAudioProfile(audioProfileValue, audioScenarioValue);
+        if (audioResult !== 0) {
+          console.warn('⚠️ setAudioProfile returned non-zero result:', audioResult);
+          // Try with numeric values directly
+          console.log('🔄 Retrying with numeric values (4, 1)...');
+          const retryResult = await this.rtcEngine.setAudioProfile(4, 1);
+          if (retryResult !== 0) {
+            console.warn('⚠️ setAudioProfile still failed with numeric values:', retryResult);
+          } else {
+            console.log('✅ Audio profile set successfully with numeric values');
+          }
+        } else {
+          console.log('✅ Audio profile set successfully');
+        }
+      } catch (error) {
+        console.error('❌ Error setting audio profile:', error);
+      }
 
       // Enable audio volume indication for speaking indicators
       await this.rtcEngine.enableAudioVolumeIndication(200, 3, true);
