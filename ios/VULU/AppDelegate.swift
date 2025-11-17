@@ -8,7 +8,7 @@ public class AppDelegate: ExpoAppDelegate {
   var window: UIWindow?
 
   var reactNativeDelegate: ExpoReactNativeFactoryDelegate?
-  var reactNativeFactory: RCTReactNativeFactory?
+  var reactNativeFactory: RCTReactNativeFactory? // Made accessible for SceneDelegate
 
   public override func application(
     _ application: UIApplication,
@@ -23,24 +23,28 @@ public class AppDelegate: ExpoAppDelegate {
     bindReactNativeFactory(factory)
 
 #if os(iOS) || os(tvOS)
-    // Fix iOS 26+ deprecation: Use windowScene instead of UIScreen.main.bounds
+    // UIScene lifecycle support for iOS 13+
+    // For iOS 13+, window creation is handled by SceneDelegate
+    // For iOS 12 and below, create window here
     if #available(iOS 13.0, *) {
-      // For iOS 13+, use window scene
-      if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-        window = UIWindow(windowScene: windowScene)
-      } else {
-        // Fallback for edge cases
+      // Window will be created by SceneDelegate when scene connects
+      // Only start React Native here if no scene delegate is available (fallback)
+      if UIApplication.shared.connectedScenes.isEmpty {
+        // Fallback: create window if no scene is available
         window = UIWindow(frame: UIScreen.main.bounds)
+        factory.startReactNative(
+          withModuleName: "main",
+          in: window,
+          launchOptions: launchOptions)
       }
     } else {
       // Fallback for iOS 12 and below
       window = UIWindow(frame: UIScreen.main.bounds)
+      factory.startReactNative(
+        withModuleName: "main",
+        in: window,
+        launchOptions: launchOptions)
     }
-
-    factory.startReactNative(
-      withModuleName: "main",
-      in: window,
-      launchOptions: launchOptions)
 #endif
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
@@ -63,6 +67,21 @@ public class AppDelegate: ExpoAppDelegate {
   ) -> Bool {
     let result = RCTLinkingManager.application(application, continue: userActivity, restorationHandler: restorationHandler)
     return super.application(application, continue: userActivity, restorationHandler: restorationHandler) || result
+  }
+
+  // MARK: - UISceneSession Lifecycle (iOS 13+)
+  // Required for UIScene lifecycle support - fixes iOS 27+ requirement
+  @available(iOS 13.0, *)
+  public func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+    let sceneConfig = UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
+    sceneConfig.delegateClass = SceneDelegate.self
+    return sceneConfig
+  }
+
+  @available(iOS 13.0, *)
+  public func application(_ application: UIApplication, didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {
+    // Called when the user discards a scene session
+    print("📱 [AppDelegate] Scene sessions discarded: \(sceneSessions.count)")
   }
 }
 
