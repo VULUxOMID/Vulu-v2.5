@@ -295,9 +295,22 @@ class MockAgoraService {
       await this.leaveChannel();
     }
     
-    this.engine = null;
+    // Clear callbacks
     this.callbacks = {};
     this.mockParticipants = [];
+    
+    // Reset engine but keep it as an object (don't set to null to avoid errors)
+    this.engine = {
+      destroy: () => Promise.resolve(),
+      joinChannel: () => Promise.resolve(0),
+      leaveChannel: () => Promise.resolve(0),
+      muteLocalAudioStream: () => Promise.resolve(0),
+      muteLocalVideoStream: () => Promise.resolve(0),
+      setChannelProfile: () => Promise.resolve(0),
+      setClientRole: () => Promise.resolve(0),
+      enableAudioVolumeIndication: () => Promise.resolve(0),
+      renewToken: () => Promise.resolve(0),
+    };
     
     console.log('✅ Mock Agora: Destroyed successfully');
   }

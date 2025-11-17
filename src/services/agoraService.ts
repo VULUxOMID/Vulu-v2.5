@@ -680,11 +680,15 @@ class AgoraService {
       }
 
       if (this.rtcEngine) {
-        // Remove all listeners
-        this.rtcEngine.removeAllListeners();
+        // Remove all listeners (only if method exists - not available in mock)
+        if (typeof this.rtcEngine.removeAllListeners === 'function') {
+          this.rtcEngine.removeAllListeners();
+        }
 
-        // Destroy the engine
-        await RtcEngine.destroy();
+        // Destroy the engine (only for real Agora SDK)
+        if (!this.isUsingMockService) {
+          await RtcEngine.destroy();
+        }
         this.rtcEngine = null;
       }
 
