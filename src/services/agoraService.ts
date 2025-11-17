@@ -563,32 +563,69 @@ class AgoraService {
       // In v4.5.3+, the API signature changed
       // Try new API: joinChannel(token, channelId, uid) - 3 parameters
       let joinResult: number;
-      try {
-        // New API: joinChannel(token, channelId, uid)
-        joinResult = await this.rtcEngine.joinChannel(token, channelName, uid);
-        console.log(`✅ Joining channel initiated (new API): ${channelName} with UID: ${uid}, result: ${joinResult}`);
-      } catch (error: any) {
-        // Fallback to old API if new one fails
-        console.log('⚠️ New API failed, trying old API format...');
+      const maxRetries = 3;
+      let retryCount = 0;
+      
+      while (retryCount < maxRetries) {
         try {
-          // Old API: joinChannel(token, channelId, info, uid) - 4 parameters
-          joinResult = await this.rtcEngine.joinChannel(token, channelName, '', uid);
-          console.log(`✅ Joining channel initiated (old API): ${channelName} with UID: ${uid}, result: ${joinResult}`);
-        } catch (oldError: any) {
-          console.error('❌ Both API formats failed:', { newError: error, oldError });
-          throw oldError;
+          // New API: joinChannel(token, channelId, uid)
+          joinResult = await this.rtcEngine.joinChannel(token, channelName, uid);
+          console.log(`✅ Joining channel initiated (new API): ${channelName} with UID: ${uid}, result: ${joinResult}`);
+          
+          // Check result code
+          if (joinResult === 0) {
+            // Success - join initiated
+            return true;
+          } else if (joinResult === -7) {
+            // ERR_NOT_READY - engine not ready yet, wait and retry
+            retryCount++;
+            if (retryCount < maxRetries) {
+              const waitTime = retryCount * 200; // 200ms, 400ms, 600ms
+              console.log(`⏳ Engine not ready (ERR_NOT_READY), waiting ${waitTime}ms before retry ${retryCount}/${maxRetries}...`);
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+              continue; // Retry
+            } else {
+              // Max retries reached, but -7 is non-critical - the engine should be ready soon
+              console.log('ℹ️ Max retries reached for ERR_NOT_READY, but continuing - engine should be ready soon');
+              return true; // Continue anyway - the join will complete when engine is ready
+            }
+          } else if (joinResult === -2) {
+            // ERR_INVALID_ARGUMENT - try old API format
+            console.log('⚠️ New API returned ERR_INVALID_ARGUMENT, trying old API format...');
+            try {
+              // Old API: joinChannel(token, channelId, info, uid) - 4 parameters
+              joinResult = await this.rtcEngine.joinChannel(token, channelName, '', uid);
+              console.log(`✅ Joining channel initiated (old API): ${channelName} with UID: ${uid}, result: ${joinResult}`);
+              if (joinResult === 0 || joinResult === -7) {
+                return true; // Success or not ready (will complete later)
+              }
+            } catch (oldError: any) {
+              console.error('❌ Old API also failed:', oldError);
+            }
+            throw new Error(`Invalid arguments to joinChannel: result=${joinResult}`);
+          } else {
+            // Other error
+            console.warn(`⚠️ joinChannel returned unexpected result: ${joinResult}`);
+            throw new Error(`joinChannel failed with result: ${joinResult}`);
+          }
+        } catch (error: any) {
+          // If it's not a retryable error, throw immediately
+          if (error.message && error.message.includes('Invalid arguments')) {
+            throw error;
+          }
+          // For other errors, try old API as fallback
+          console.log('⚠️ New API failed, trying old API format...');
+          try {
+            joinResult = await this.rtcEngine.joinChannel(token, channelName, '', uid);
+            console.log(`✅ Joining channel initiated (old API): ${channelName} with UID: ${uid}, result: ${joinResult}`);
+            if (joinResult === 0 || joinResult === -7) {
+              return true; // Success or not ready (will complete later)
+            }
+          } catch (oldError: any) {
+            console.error('❌ Both API formats failed:', { newError: error, oldError });
+            throw oldError;
+          }
         }
-      }
-
-      // Check result code (0 = success, negative = error)
-      if (joinResult !== 0) {
-        console.warn(`⚠️ joinChannel returned non-zero result: ${joinResult}`);
-        // -2 is ERR_INVALID_ARGUMENT, -7 is ERR_NOT_READY
-        // -7 is non-critical (engine not ready yet), but -2 indicates a real problem
-        if (joinResult === -2) {
-          throw new Error(`Invalid arguments to joinChannel: result=${joinResult}`);
-        }
-        // For -7, we can continue as the engine will be ready when joining
       }
 
       return true;
