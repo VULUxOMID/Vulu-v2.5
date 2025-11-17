@@ -150,13 +150,34 @@ if (!isExpoGo) {
     // Try to require the real Agora SDK
     const agoraModule = require('react-native-agora');
     
-    // Verify that RtcEngine is actually available (not just the module)
-    if (agoraModule && agoraModule.RtcEngine && typeof agoraModule.RtcEngine.create === 'function') {
-      agoraExports = agoraModule;
-      usingRealSDK = true;
-      console.log('✅ Real Agora SDK imported and verified successfully');
+    // Debug: Log what we actually got from the module
+    if (agoraModule) {
+      console.log('🔍 Agora module loaded, checking exports...');
+      console.log('🔍 Module keys:', Object.keys(agoraModule).slice(0, 10).join(', '));
+      console.log('🔍 RtcEngine type:', typeof agoraModule.RtcEngine);
+      console.log('🔍 RtcEngine.create type:', typeof agoraModule.RtcEngine?.create);
+      
+      // Try different ways to access RtcEngine
+      const RtcEngine = agoraModule.RtcEngine || agoraModule.default?.RtcEngine || agoraModule.default;
+      
+      // Verify that RtcEngine is actually available and has create method
+      if (RtcEngine && typeof RtcEngine.create === 'function') {
+        // Use the module but ensure RtcEngine is properly set
+        agoraExports = {
+          ...agoraModule,
+          RtcEngine: RtcEngine
+        };
+        usingRealSDK = true;
+        console.log('✅ Real Agora SDK imported and verified successfully');
+        console.log('✅ RtcEngine.create is available');
+      } else {
+        console.warn('⚠️ Agora SDK module found but RtcEngine.create is not available');
+        console.warn('⚠️ RtcEngine:', RtcEngine);
+        console.warn('⚠️ Falling back to mock - native module may not be properly linked');
+        agoraExports = mockAgoraExports;
+      }
     } else {
-      console.warn('⚠️ Agora SDK module found but RtcEngine is not available - using mock');
+      console.warn('⚠️ Agora module is null or undefined');
       agoraExports = mockAgoraExports;
     }
   } catch (error: any) {
@@ -165,6 +186,7 @@ if (!isExpoGo) {
       console.log('🎭 Agora SDK native module not found - using mock (this is normal in Expo Go or before native build)');
     } else {
       console.warn('⚠️ Error importing Agora SDK, using mock:', error.message);
+      console.warn('⚠️ Error details:', error);
     }
     agoraExports = mockAgoraExports;
   }
