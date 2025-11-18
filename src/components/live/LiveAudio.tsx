@@ -39,10 +39,37 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
         liveAgora.setEvents({
           onJoinSuccess: () => { setConnected(true); setParticipants(p => Math.max(1, p)) },
           onConnectionChange: (c) => setConnected(c),
-          onConnectionEvent: (s, r) => { setConnState(s); setConnReason(r) },
+          onConnectionEvent: async (s, r) => {
+            setConnState(s); setConnReason(r)
+            // Token invalid/expired handling
+            if (r === 8 || r === 9) {
+              try {
+                setConnecting(true)
+                const tokenData = await getToken(channel, numericUid, isHost ? 'host' : 'audience')
+                await liveAgora.renewToken(tokenData.token)
+              } catch (e: any) {
+                setError(e?.message || 'Token renewal failed')
+              } finally {
+                setConnecting(false)
+              }
+            }
+          },
           onUserJoined: () => setParticipants(p => p + 1),
           onUserOffline: () => setParticipants(p => Math.max(0, p - 1)),
-          onError: (code) => setError(String(code))
+          onError: async (code) => {
+            setError(String(code))
+            if (code === 109 || code === 110) {
+              try {
+                setConnecting(true)
+                const tokenData = await getToken(channel, numericUid, isHost ? 'host' : 'audience')
+                await liveAgora.renewToken(tokenData.token)
+              } catch (e: any) {
+                setError(e?.message || 'Token renewal failed')
+              } finally {
+                setConnecting(false)
+              }
+            }
+          }
         })
         const appId = process.env.EXPO_PUBLIC_AGORA_APP_ID || ''
         if (!appId) {

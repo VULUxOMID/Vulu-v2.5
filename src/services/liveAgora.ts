@@ -92,6 +92,13 @@ class LiveAgora {
     await this.engine.leaveChannel()
   }
 
+  async renewToken(token: string) {
+    if (!this.engine) return
+    if (typeof this.engine.renewToken === 'function') {
+      await this.engine.renewToken(token)
+    }
+  }
+
   async destroy() {
     if (!this.engine) return
     try {
