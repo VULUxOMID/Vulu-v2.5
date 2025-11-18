@@ -35,7 +35,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import GuestModeIndicator from '../components/GuestModeIndicator';
 
 // Import debug utilities for testing
-import '../utils/debugStreamTest';
 import { firestoreService, GlobalChatMessage } from '../services/firestoreService';
 import FirebaseErrorHandler from '../utils/firebaseErrorHandler';
 import { useGuestRestrictions } from '../hooks/useGuestRestrictions';
