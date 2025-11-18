@@ -127,6 +127,17 @@ class LiveAgora {
     this.engine = null
     this.initialized = false
   }
+
+  async setMute(muted: boolean) {
+    if (!this.engine) return
+    if (typeof this.engine.muteLocalAudioStream === 'function') {
+      await this.engine.muteLocalAudioStream(muted)
+      return
+    }
+    if (typeof this.engine.enableLocalAudio === 'function') {
+      await this.engine.enableLocalAudio(!muted)
+    }
+  }
 }
 
 export const liveAgora = new LiveAgora()

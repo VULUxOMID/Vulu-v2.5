@@ -4,6 +4,7 @@ import { liveAgora } from '../../services/liveAgora'
 import { getToken } from '../../services/liveToken'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db, auth } from '../../services/firebase'
+import { permissionService } from '../../services/permissionService'
 
 type Props = {
   channel: string
@@ -19,6 +20,7 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
   const [participants, setParticipants] = useState<number>(0)
   const [connState, setConnState] = useState<number>(0)
   const [connReason, setConnReason] = useState<number>(0)
+  const [muted, setMuted] = useState(false)
   const mountedRef = useRef(true)
 
   const toText = (v: any) => {
@@ -48,6 +50,13 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
       try {
         setConnecting(true)
         setError(null)
+        await permissionService.initializePermissions()
+        const perms = await permissionService.requestPermissions()
+        if (!perms.microphone) {
+          setConnecting(false)
+          setError(permissionService.handlePermissionDenied('microphone'))
+          return
+        }
         liveAgora.setEvents({
           onJoinSuccess: () => { if (!mountedRef.current) return; setConnected(true); setParticipants(p => Math.max(1, p)) },
           onConnectionChange: (c) => { if (!mountedRef.current) return; setConnected(c) },
@@ -156,6 +165,18 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
           <TouchableOpacity style={styles.button} onPress={() => liveAgora.leave()}>
             <Text style={styles.buttonText}>Leave</Text>
           </TouchableOpacity>
+          {isHost && (
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: muted ? '#444' : '#6E56F7' }]}
+              onPress={async () => {
+                const next = !muted
+                setMuted(next)
+                await liveAgora.setMute(next)
+              }}
+            >
+              <Text style={styles.buttonText}>{muted ? 'Unmute' : 'Mute'}</Text>
+            </TouchableOpacity>
+          )}
           {!connected && !connecting && (
             <TouchableOpacity style={[styles.button, { backgroundColor: '#444' }]} onPress={() => {
               setConnecting(true)
@@ -166,6 +187,10 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
                   const appId = process.env.EXPO_PUBLIC_AGORA_APP_ID || ''
                   if (!appId) throw new Error('Missing App ID')
                   await liveAgora.initialize(appId)
+
+                  await permissionService.initializePermissions()
+                  const perms = await permissionService.requestPermissions()
+                  if (!perms.microphone) throw new Error(permissionService.handlePermissionDenied('microphone'))
 
                   // Ensure stream doc exists (host)
                   const streamRef = doc(db, 'streams', channel)
