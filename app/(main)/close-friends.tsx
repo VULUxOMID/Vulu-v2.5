@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, SafeAreaView } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Feather, AntDesign } from '@expo/vector-icons';
+import { Feather, MaterialIcons } from '@expo/vector-icons';
 
 // Define the friend type
 interface Friend {
@@ -54,9 +54,9 @@ export default function CloseFriends() {
         style={[styles.starButton, item.isCloseFriend && styles.starButtonActive]}
         onPress={() => toggleCloseFriend(item.id)}
       >
-        <AntDesign 
-          name={item.isCloseFriend ? "star" : "staro"} 
-          size={18} 
+        <MaterialIcons 
+          name={item.isCloseFriend ? "star" : "star-border"} 
+          size={20} 
           color={item.isCloseFriend ? "#FFD700" : "#9BA1A6"} 
         />
       </TouchableOpacity>
@@ -180,4 +180,4 @@ const styles = StyleSheet.create({
   starButtonActive: {
     backgroundColor: 'rgba(255, 215, 0, 0.15)',
   },
-}); 
+});

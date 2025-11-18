@@ -333,6 +333,8 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
   // Real chat state
   const [messages, setMessages] = useState<UnifiedMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [streakActive, setStreakActive] = useState(false)
+  const [streakCount, setStreakCount] = useState<number | undefined>(undefined)
   const [isLoading, setIsLoading] = useState(true);
 
   // Pagination state
@@ -1359,6 +1361,8 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
             console.log('Options pressed');
           }}
           onToggleCloseFriend={handleToggleCloseFriend}
+          streakActive={streakActive}
+          streakCount={streakCount}
         />
 
         {/* Live Chat Preview - if needed */}
@@ -1804,4 +1808,20 @@ const ChatScreenWrapper = (props: ChatScreenProps) => {
 };
 
 export default ChatScreenWrapper;
+  useEffect(() => {
+    let mounted = true
+    const loadConversationMeta = async () => {
+      try {
+        if (!conversationId) return
+        const conv = await firestoreService.getConversationById(conversationId)
+        const data: any = conv || {}
+        const streak = data.streak || {}
+        if (!mounted) return
+        setStreakActive(!!streak.active)
+        setStreakCount(typeof streak.consecutiveDays === 'number' ? streak.consecutiveDays : undefined)
+      } catch {}
+    }
+    loadConversationMeta()
+    return () => { mounted = false }
+  }, [conversationId])
 

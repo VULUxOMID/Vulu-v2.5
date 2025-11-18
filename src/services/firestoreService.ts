@@ -663,6 +663,20 @@ class FirestoreService {
     }
   }
 
+  async getConversationById(conversationId: string): Promise<Conversation | null> {
+    try {
+      const conversationRef = doc(db, 'conversations', conversationId)
+      const conversationSnap = await getDoc(conversationRef)
+      if (conversationSnap.exists()) {
+        return { id: conversationSnap.id, ...conversationSnap.data() } as Conversation
+      }
+      return null
+    } catch (error: any) {
+      console.error('Failed to get conversation by id:', error.message)
+      return null
+    }
+  }
+
   async sendDirectMessage(conversationId: string, message: Omit<DirectMessage, 'id' | 'timestamp'>): Promise<string> {
     try {
       // Use transaction for atomic message sending and unread count update
@@ -1655,4 +1669,4 @@ class FirestoreService {
 }
 
 export const firestoreService = new FirestoreService();
-export default firestoreService; 
+export default firestoreService;

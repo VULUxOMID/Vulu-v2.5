@@ -1,9 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Platform } from 'react-native';
-import { MaterialIcons, AntDesign } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getDefaultAvatarViewProps } from '../utils/defaultAvatars';
+import StreakFlame from './StreakFlame'
 
 
 export interface ChatHeaderProps {
@@ -22,6 +23,8 @@ export interface ChatHeaderProps {
 
   onScheduledMessages?: () => void;
   onToggleCloseFriend?: () => void;
+  streakActive?: boolean;
+  streakCount?: number;
 }
 
 /**
@@ -42,7 +45,9 @@ const ChatHeader = ({
   onPinnedMessages,
 
   onScheduledMessages,
-  onToggleCloseFriend
+  onToggleCloseFriend,
+  streakActive,
+  streakCount
 }: ChatHeaderProps) => {
   const insets = useSafeAreaInsets();
   
@@ -131,15 +136,21 @@ const ChatHeader = ({
           <View style={styles.nameStatusContainer}>
             <View style={styles.nameContainer}>
               <Text style={styles.nameText} numberOfLines={1}>{name}</Text>
+              {streakActive ? (
+                <View style={styles.streakRow}>
+                  <StreakFlame />
+                  <Text style={styles.streakText}>{String(streakCount || 3)}d</Text>
+                </View>
+              ) : null}
               {onToggleCloseFriend && (
                 <TouchableOpacity 
                   style={styles.starButton} 
                   onPress={onToggleCloseFriend}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <AntDesign 
-                    name={isCloseFriend ? "star" : "staro"} 
-                    size={16} 
+                  <MaterialIcons 
+                    name={isCloseFriend ? "star" : "star-border"} 
+                    size={18} 
                     color={isCloseFriend ? "#FFD700" : "#9BA1A6"} 
                   />
                 </TouchableOpacity>
@@ -275,6 +286,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
+  streakRow: { flexDirection: 'row', alignItems: 'center', marginLeft: 6 },
+  streakFlameWrap: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#6E69F4' },
+  streakText: { color: '#9BA1A6', fontSize: 10, marginLeft: 4 },
   statusContainer: {
     flexDirection: 'row',
     alignItems: 'center'
@@ -320,4 +334,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ChatHeader; 
+export default ChatHeader;

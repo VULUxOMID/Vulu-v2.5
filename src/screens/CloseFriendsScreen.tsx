@@ -11,7 +11,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MaterialIcons, Feather, AntDesign } from '@expo/vector-icons';
+import { MaterialIcons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import CommonHeader from '../components/CommonHeader';
 import { firestoreService } from '../services/firestoreService';
@@ -181,7 +181,15 @@ const CloseFriendsScreen = () => {
       <View style={styles.friendItem}>
         <View style={styles.friendInfoContainer}>
           <View style={styles.avatarContainer}>
-            <Image source={{ uri: item.avatar }} style={styles.avatar} />
+            {item.avatar ? (
+              <Image source={{ uri: item.avatar }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: '#6E69F4', justifyContent: 'center', alignItems: 'center' }]}> 
+                <Text style={{ color: '#FFF', fontWeight: '700' }}>
+                  {item.name?.charAt(0)?.toUpperCase() || '?'}
+                </Text>
+              </View>
+            )}
             <StatusIndicator status={item.status} />
           </View>
           <Text style={styles.friendName}>{item.name}</Text>
@@ -194,9 +202,9 @@ const CloseFriendsScreen = () => {
           ]}
           onPress={() => toggleCloseFriend(item.id)}
         >
-          <AntDesign 
-            name={item.isCloseFriend ? "star" : "staro"} 
-            size={18} 
+          <MaterialIcons 
+            name={item.isCloseFriend ? "star" : "star-border"} 
+            size={20} 
             color={item.isCloseFriend ? "#FFD700" : "#9BA1A6"} 
           />
         </TouchableOpacity>
@@ -430,4 +438,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default CloseFriendsScreen; 
+export default CloseFriendsScreen;

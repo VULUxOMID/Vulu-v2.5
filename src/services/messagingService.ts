@@ -748,6 +748,25 @@ export class MessagingService {
 
         // Update conversation
         const lastMessageText = isEncrypted ? '[Encrypted]' : text;
+        const today = new Date();
+        const y = today.getUTCFullYear();
+        const m = String(today.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(today.getUTCDate()).padStart(2, '0');
+        const dayKey = `${y}-${m}-${d}`;
+        const existingStreak = (conversation as any).streak || {};
+        const prevDay = existingStreak.lastDate || null;
+        const prevParticipants = Array.isArray(existingStreak.participantsToday) ? existingStreak.participantsToday : [];
+        let consecutive = Number(existingStreak.consecutiveDays || 0);
+        let participantsToday: string[] = prevParticipants;
+        if (prevDay === dayKey) {
+          if (!participantsToday.includes(senderId)) participantsToday = [...participantsToday, senderId];
+        } else {
+          const hadBothSides = prevParticipants.length >= 2 && new Set(prevParticipants).size >= 2;
+          consecutive = hadBothSides ? consecutive + 1 : 1;
+          participantsToday = [senderId];
+        }
+        const streakActive = consecutive >= 3;
+
         const conversationUpdate = {
           lastMessage: {
             text: lastMessageText,
@@ -759,7 +778,13 @@ export class MessagingService {
           },
           lastMessageTime: serverTimestamp(),
           [`unreadCount.${recipientId}`]: ((conversation.unreadCount || {})[recipientId] || 0) + 1,
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
+          streak: {
+            lastDate: dayKey,
+            participantsToday,
+            consecutiveDays: consecutive,
+            active: streakActive
+          }
         };
 
         transaction.update(conversationRef, conversationUpdate);
