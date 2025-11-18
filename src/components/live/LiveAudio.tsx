@@ -21,6 +21,17 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
   const [connReason, setConnReason] = useState<number>(0)
   const mountedRef = useRef(true)
 
+  const toText = (v: any) => {
+    try {
+      if (v == null) return ''
+      const t = typeof v
+      if (t === 'string' || t === 'number' || t === 'boolean') return String(v)
+      return JSON.stringify(v)
+    } catch {
+      return '[unserializable]'
+    }
+  }
+
   const numericUid = useMemo(() => {
     let hash = 0
     for (let i = 0; i < uid.length; i++) {
@@ -41,7 +52,7 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
           onJoinSuccess: () => { if (!mountedRef.current) return; setConnected(true); setParticipants(p => Math.max(1, p)) },
           onConnectionChange: (c) => { if (!mountedRef.current) return; setConnected(c) },
           onConnectionEvent: async (s, r) => {
-            if (!mountedRef.current) return; setConnState(s); setConnReason(r)
+            if (!mountedRef.current) return; setConnState(Number(s)); setConnReason(Number(r))
             // Token invalid/expired handling
             if (r === 8 || r === 9) {
               try {
@@ -136,7 +147,7 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
         <Text style={styles.label}>Channel: {channel}</Text>
         <Text style={styles.label}>Role: {isHost ? 'Host' : 'Audience'}</Text>
         <Text style={styles.label}>Participants: {participants}</Text>
-        <Text style={styles.debug}>State: {String(connState)} Reason: {String(connReason)}</Text>
+        <Text style={styles.debug}>State: {toText(connState)} Reason: {toText(connReason)}</Text>
         {error && <Text style={styles.error}>{`Error: ${String(error)}`}</Text>}
         <View style={styles.row}>
           <TouchableOpacity style={styles.button} onPress={() => liveAgora.leave()}>
