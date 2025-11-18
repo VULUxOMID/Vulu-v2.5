@@ -19,6 +19,7 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
   const [participants, setParticipants] = useState<number>(0)
   const [connState, setConnState] = useState<number>(0)
   const [connReason, setConnReason] = useState<number>(0)
+  const mountedRef = useRef(true)
 
   const numericUid = useMemo(() => {
     let hash = 0
@@ -37,10 +38,10 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
         setConnecting(true)
         setError(null)
         liveAgora.setEvents({
-          onJoinSuccess: () => { setConnected(true); setParticipants(p => Math.max(1, p)) },
-          onConnectionChange: (c) => setConnected(c),
+          onJoinSuccess: () => { if (!mountedRef.current) return; setConnected(true); setParticipants(p => Math.max(1, p)) },
+          onConnectionChange: (c) => { if (!mountedRef.current) return; setConnected(c) },
           onConnectionEvent: async (s, r) => {
-            setConnState(s); setConnReason(r)
+            if (!mountedRef.current) return; setConnState(s); setConnReason(r)
             // Token invalid/expired handling
             if (r === 8 || r === 9) {
               try {
@@ -48,25 +49,25 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
                 const tokenData = await getToken(channel, numericUid, isHost ? 'host' : 'audience')
                 await liveAgora.renewToken(tokenData.token)
               } catch (e: any) {
-                setError(e?.message || 'Token renewal failed')
+                if (!mountedRef.current) return; setError(e?.message || 'Token renewal failed')
               } finally {
-                setConnecting(false)
+                if (!mountedRef.current) return; setConnecting(false)
               }
             }
           },
-          onUserJoined: () => setParticipants(p => p + 1),
-          onUserOffline: () => setParticipants(p => Math.max(0, p - 1)),
+          onUserJoined: () => { if (!mountedRef.current) return; setParticipants(p => p + 1) },
+          onUserOffline: () => { if (!mountedRef.current) return; setParticipants(p => Math.max(0, p - 1)) },
           onError: async (code) => {
-            setError(String(code))
+            if (!mountedRef.current) return; setError(String(code))
             if (code === 109 || code === 110) {
               try {
                 setConnecting(true)
                 const tokenData = await getToken(channel, numericUid, isHost ? 'host' : 'audience')
                 await liveAgora.renewToken(tokenData.token)
               } catch (e: any) {
-                setError(e?.message || 'Token renewal failed')
+                if (!mountedRef.current) return; setError(e?.message || 'Token renewal failed')
               } finally {
-                setConnecting(false)
+                if (!mountedRef.current) return; setConnecting(false)
               }
             }
           }
@@ -112,8 +113,10 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
         setConnecting(false)
       }
     }
+    mountedRef.current = true
     run()
     return () => {
+      mountedRef.current = false
       liveAgora.leave().catch(() => {})
     }
   }, [channel, numericUid, isHost])
