@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Alert } from 'react-native';
 import { useAuthSafe } from './AuthContext';
+import { collection, onSnapshot, query, where, doc, setDoc, serverTimestamp, getDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { db, auth } from '../services/firebase';
 
 // Define the structure of a stream
 export interface StreamHost {
@@ -88,7 +90,50 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
   const { user } = authContext || { user: null };
 
   useEffect(() => {
-    setStreams([]);
+    const q = query(collection(db, 'streams'), where('isActive', '==', true));
+    const unsub = onSnapshot(q, (snap) => {
+      const list: LiveStream[] = [];
+      snap.forEach(async d => {
+        const data = d.data() as any;
+        const host = {
+          name: data.hostName || 'Host',
+          avatar: data.hostAvatar || '',
+          joinOrder: 1,
+          isSpeaking: true,
+          isMuted: false,
+        };
+        const viewerCount = Number(data.viewerCount || 0)
+        const hostConnected = !!data.hostConnected
+        const lastActivityMs = data.lastActivity?.toMillis?.() ?? 0
+        const startedMs = data.startedAt?.toMillis?.() ?? 0
+        const isVisible = (!!data.isActive) && hostConnected
+        // Grace period for fresh streams: do NOT delete immediately while host is connecting
+        const ageMs = startedMs > 0 ? (Date.now() - startedMs) : 0
+        if (!!data.isActive && !hostConnected && viewerCount <= 0 && ageMs > 15 * 1000) {
+          try {
+            await deleteDoc(doc(db, 'streams', d.id))
+          } catch {
+            try {
+              await updateDoc(doc(db, 'streams', d.id), { isActive: false, updatedAt: serverTimestamp(), endedAt: serverTimestamp() })
+            } catch {}
+          }
+          return
+        }
+        if (!isVisible) return
+        list.push({
+          id: d.id,
+          title: data.title || 'Live Stream',
+          hosts: [host],
+          viewers: [],
+          views: viewerCount,
+          boost: 0,
+          isActive: !!data.isActive,
+          startedAt: (data.startedAt?.toMillis?.() ?? Date.now()),
+        });
+      });
+      setStreams(list);
+    });
+    return () => { unsub(); };
   }, []);
 
   // Categorize streams for easier access
@@ -159,9 +204,7 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
   // Simplified: Join a stream
-  const joinStream = async (_streamId: string) => {
-    Alert.alert('Live Disabled', 'Live streaming is currently disabled.');
-  };
+  const joinStream = async (_streamId: string) => {};
 
   // Add this new function to handle minimizing streams
   const setStreamMinimized = (streamId: string, minimized: boolean) => {
@@ -172,8 +215,31 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
   // Simplified: Create a new stream
-  const createNewStream = async (): Promise<string> => {
-    throw new Error('Live streaming is disabled');
+  const createNewStream = async (title: string, hostId: string, hostName: string, hostAvatar: string): Promise<string> => {
+    const channel = `live_${hostId}_${Date.now()}`;
+    const streamRef = doc(db, 'streams', channel);
+    const existing = await getDoc(streamRef);
+    if (!existing.exists()) {
+      await setDoc(streamRef, {
+        id: channel,
+        hostId,
+        hostName,
+        hostAvatar,
+        title: title || 'Live Stream',
+        description: '',
+        isActive: true,
+        viewerCount: 0,
+        maxViewers: 0,
+        totalViewers: 0,
+        participants: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        startedAt: serverTimestamp(),
+        lastActivity: serverTimestamp(),
+        bannedUserIds: [],
+      });
+    }
+    return channel;
   };
 
   // New functions for enhanced live stream features

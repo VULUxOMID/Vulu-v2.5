@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Image, ScrollView, Dimensions, Animated, Alert, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import LiveAudio from './live/LiveAudio'
+import LiveSetup from './live/LiveSetup'
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLiveStreams, LiveStream } from '../context/LiveStreamContext';
 import { useAuth } from '../context/AuthContext';
@@ -370,14 +371,13 @@ const LiveStreamGrid = () => {
   
   // Handle "Go Live" button press with complete functionality
   const [liveOverlay, setLiveOverlay] = useState<{channel: string, isHost: boolean} | null>(null)
+  const [setupVisible, setSetupVisible] = useState(false)
   const handleGoLive = async () => {
     if (!user) {
       Alert.alert('Sign In Required', 'You need to sign in to start a live stream.')
       return
     }
-    const uid = user.uid
-    const channel = `live_${uid}_${Date.now()}`
-    setLiveOverlay({ channel, isHost: true })
+    setSetupVisible(true)
   };
 
   // Create button to start new stream
@@ -470,6 +470,14 @@ const LiveStreamGrid = () => {
         >
           {renderStreamRows()}
         </ScrollView>
+        <Modal visible={setupVisible} animationType="slide" onRequestClose={() => setSetupVisible(false)}>
+          {setupVisible && (
+            <LiveSetup
+              onCancel={() => setSetupVisible(false)}
+              onStart={(channel) => { setSetupVisible(false); setLiveOverlay({ channel, isHost: true }) }}
+            />
+          )}
+        </Modal>
         <Modal visible={!!liveOverlay} animationType="slide" onRequestClose={() => setLiveOverlay(null)}>
           {liveOverlay && (
             <LiveAudio channel={liveOverlay.channel} uid={user?.uid || 'guest'} isHost={liveOverlay.isHost} onClose={() => setLiveOverlay(null)} />

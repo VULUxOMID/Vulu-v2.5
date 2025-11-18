@@ -1,4 +1,5 @@
 import { Audio } from 'expo-av';
+import { Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
@@ -225,6 +226,23 @@ class PermissionService {
 
   getPermissionState(): PermissionState {
     return { ...this.permissionState };
+  }
+
+  async getCurrentStatus(): Promise<{ status: string; granted: boolean; canAskAgain: boolean }> {
+    try {
+      const s = await Audio.getPermissionsAsync();
+      return { status: s.status, granted: !!s.granted, canAskAgain: !!s.canAskAgain };
+    } catch {
+      return { status: 'unknown', granted: false, canAskAgain: true };
+    }
+  }
+
+  async openSystemSettings(): Promise<void> {
+    try {
+      await Linking.openSettings();
+    } catch (e) {
+      console.warn('⚠️ Failed to open system settings:', e);
+    }
   }
 
   hasRequiredPermissions(): boolean {

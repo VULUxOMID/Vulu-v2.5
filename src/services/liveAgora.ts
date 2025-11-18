@@ -15,6 +15,7 @@ class LiveAgora {
   private engine: any | null = null
   private initialized = false
   private events: LiveEvents = {}
+  private joinedChannelId: string | null = null
 
   setEvents(events: LiveEvents) {
     this.events = events
@@ -98,12 +99,16 @@ class LiveAgora {
     }
     await this.engine.setClientRole(clientRole)
     const res = await this.engine.joinChannel(token, channel, uid)
+    if (res === 0) {
+      this.joinedChannelId = channel
+    }
     return res
   }
 
   async leave() {
     if (!this.engine) return
     await this.engine.leaveChannel()
+    this.joinedChannelId = null
   }
 
   async renewToken(token: string) {
@@ -126,6 +131,7 @@ class LiveAgora {
     this.engine.release?.()
     this.engine = null
     this.initialized = false
+    this.joinedChannelId = null
   }
 
   async setMute(muted: boolean) {
@@ -137,6 +143,14 @@ class LiveAgora {
     if (typeof this.engine.enableLocalAudio === 'function') {
       await this.engine.enableLocalAudio(!muted)
     }
+  }
+
+  isJoined() {
+    return !!this.joinedChannelId
+  }
+
+  getJoinedChannelId() {
+    return this.joinedChannelId
   }
 }
 
