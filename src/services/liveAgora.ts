@@ -82,6 +82,12 @@ class LiveAgora {
   async join(channel: string, uid: number, role: Role, token: string) {
     const clientRole = role === 'host' ? ClientRoleType.ClientRoleBroadcaster : ClientRoleType.ClientRoleAudience
     await this.engine.enableAudio?.()
+    if (typeof this.engine.setDefaultAudioRouteToSpeaker === 'function') {
+      await this.engine.setDefaultAudioRouteToSpeaker(true)
+    }
+    if (typeof this.engine.enableLocalAudio === 'function') {
+      await this.engine.enableLocalAudio(true)
+    }
     await this.engine.setClientRole(clientRole)
     const res = await this.engine.joinChannel(token, channel, uid)
     return res
