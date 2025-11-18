@@ -17,6 +17,8 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [participants, setParticipants] = useState<number>(0)
+  const [connState, setConnState] = useState<number>(0)
+  const [connReason, setConnReason] = useState<number>(0)
 
   const numericUid = useMemo(() => {
     let hash = 0
@@ -35,8 +37,9 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
         setConnecting(true)
         setError(null)
         liveAgora.setEvents({
-          onJoinSuccess: () => setConnected(true),
+          onJoinSuccess: () => { setConnected(true); setParticipants(p => Math.max(1, p)) },
           onConnectionChange: (c) => setConnected(c),
+          onConnectionEvent: (s, r) => { setConnState(s); setConnReason(r) },
           onUserJoined: () => setParticipants(p => p + 1),
           onUserOffline: () => setParticipants(p => Math.max(0, p - 1)),
           onError: (code) => setError(String(code))
@@ -87,10 +90,13 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
     }
   }, [channel, numericUid, isHost])
 
+  const statusText = connected ? 'CONNECTED' : connecting ? 'CONNECTING…' : 'DISCONNECTED'
+  const statusColor = connected ? '#00D084' : connecting ? '#FFD700' : '#FF6B6B'
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{connected ? 'LIVE' : connecting ? 'CONNECTING…' : 'DISCONNECTED'}</Text>
+      <View style={[styles.header, { borderBottomColor: statusColor }] }>
+        <Text style={[styles.title, { color: statusColor }]}>{statusText}</Text>
         <TouchableOpacity style={styles.close} onPress={() => { onClose?.(); }}>
           <Text style={styles.closeText}>Close</Text>
         </TouchableOpacity>
@@ -99,10 +105,31 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
         <Text style={styles.label}>Channel: {channel}</Text>
         <Text style={styles.label}>Role: {isHost ? 'Host' : 'Audience'}</Text>
         <Text style={styles.label}>Participants: {participants}</Text>
+        <Text style={styles.debug}>State: {connState} Reason: {connReason}</Text>
         {error && <Text style={styles.error}>Error: {error}</Text>}
-        <TouchableOpacity style={styles.button} onPress={() => liveAgora.leave()}>
-          <Text style={styles.buttonText}>Leave</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <TouchableOpacity style={styles.button} onPress={() => liveAgora.leave()}>
+            <Text style={styles.buttonText}>Leave</Text>
+          </TouchableOpacity>
+          {!connected && !connecting && (
+            <TouchableOpacity style={[styles.button, { backgroundColor: '#444' }]} onPress={() => {
+              setConnecting(true)
+              setError(null)
+              ;(async () => {
+                try {
+                  const tokenData = await getToken(channel, numericUid, isHost ? 'host' : 'audience')
+                  await liveAgora.join(channel, numericUid, isHost ? 'host' : 'audience', tokenData.token)
+                } catch (e: any) {
+                  setError(e?.message || 'Join failed')
+                } finally {
+                  setConnecting(false)
+                }
+              })()
+            }}>
+              <Text style={styles.buttonText}>Reconnect</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
   )
@@ -110,12 +137,13 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0B0B0E' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
-  title: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
+  title: { color: '#FFFFFF', fontSize: 20, fontWeight: '700' },
   close: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#222', borderRadius: 8 },
   closeText: { color: '#FFF' },
   body: { paddingHorizontal: 16, gap: 8 },
   label: { color: '#FFFFFF', fontSize: 14 },
+  debug: { color: '#999', fontSize: 12 },
   error: { color: '#FF6B6B', marginTop: 8 },
   button: { marginTop: 16, backgroundColor: '#6E56F7', paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
   buttonText: { color: '#FFF', fontWeight: '600' }

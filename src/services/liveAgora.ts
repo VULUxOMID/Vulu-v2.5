@@ -5,6 +5,7 @@ type Role = 'host' | 'audience'
 export type LiveEvents = {
   onJoinSuccess?: (channel: string, uid: number) => void
   onConnectionChange?: (connected: boolean) => void
+  onConnectionEvent?: (state: number, reason: number) => void
   onUserJoined?: (uid: number) => void
   onUserOffline?: (uid: number) => void
   onError?: (code: number) => void
@@ -37,6 +38,7 @@ class LiveAgora {
       onConnectionStateChanged: (_state: number, _reason: number) => {
         const connected = _state === 3
         this.events.onConnectionChange?.(connected)
+        this.events.onConnectionEvent?.(_state, _reason)
       },
       onUserJoined: (uid: number) => {
         this.events.onUserJoined?.(uid)
@@ -61,6 +63,7 @@ class LiveAgora {
 
   async join(channel: string, uid: number, role: Role, token: string) {
     const clientRole = role === 'host' ? ClientRoleType.ClientRoleBroadcaster : ClientRoleType.ClientRoleAudience
+    await this.engine.enableAudio?.()
     await this.engine.setClientRole(clientRole)
     const res = await this.engine.joinChannel(token, channel, uid, { publishMicrophoneTrack: role === 'host' })
     return res
