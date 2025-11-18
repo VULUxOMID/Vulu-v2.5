@@ -76,7 +76,8 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
         }
 
         const tokenData = await getToken(channel, numericUid, isHost ? 'host' : 'audience')
-        await liveAgora.join(channel, numericUid, isHost ? 'host' : 'audience', tokenData.token)
+        const code = await liveAgora.join(channel, numericUid, isHost ? 'host' : 'audience', tokenData.token)
+        if (code === 0) { setConnected(true); setParticipants(p => Math.max(1, p)) }
       } catch (e: any) {
         setError(e?.message || 'Join failed')
         Alert.alert('Live Error', e?.message || 'Join failed')
@@ -149,7 +150,7 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
 
                   const tokenData = await getToken(channel, numericUid, isHost ? 'host' : 'audience')
                   const code = await liveAgora.join(channel, numericUid, isHost ? 'host' : 'audience', tokenData.token)
-                  if (code !== 0) throw new Error(`Join failed: ${code}`)
+                  if (code === 0) { setConnected(true); setParticipants(p => Math.max(1, p)) } else { throw new Error(`Join failed: ${code}`) }
                 } catch (e: any) {
                   setError(e?.message || 'Join failed')
                 } finally {
