@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native'
 import { liveAgora } from '../../services/liveAgora'
 import { getToken } from '../../services/liveToken'
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { db, auth } from '../../services/firebase'
 
 type Props = {
   channel: string
@@ -44,6 +46,32 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
           throw new Error('Missing App ID')
         }
         await liveAgora.initialize(appId)
+
+        // Ensure a stream document exists for token validation (backend requires it)
+        const streamRef = doc(db, 'streams', channel)
+        const snap = await getDoc(streamRef)
+        if (!snap.exists() && isHost) {
+          const user = auth.currentUser
+          await setDoc(streamRef, {
+            id: channel,
+            hostId: user?.uid || 'host',
+            hostName: user?.displayName || 'Host',
+            hostAvatar: user?.photoURL || null,
+            title: 'Live Stream',
+            description: '',
+            isActive: true,
+            viewerCount: 0,
+            maxViewers: 0,
+            totalViewers: 0,
+            participants: [],
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            startedAt: serverTimestamp(),
+            lastActivity: serverTimestamp(),
+            bannedUserIds: [],
+          })
+        }
+
         const tokenData = await getToken(channel, numericUid, isHost ? 'host' : 'audience')
         await liveAgora.join(channel, numericUid, isHost ? 'host' : 'audience', tokenData.token)
       } catch (e: any) {
