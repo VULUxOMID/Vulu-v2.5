@@ -117,8 +117,39 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
               setError(null)
               ;(async () => {
                 try {
+                  await liveAgora.leave()
+                  const appId = process.env.EXPO_PUBLIC_AGORA_APP_ID || ''
+                  if (!appId) throw new Error('Missing App ID')
+                  await liveAgora.initialize(appId)
+
+                  // Ensure stream doc exists (host)
+                  const streamRef = doc(db, 'streams', channel)
+                  const snap = await getDoc(streamRef)
+                  if (!snap.exists() && isHost) {
+                    const user = auth.currentUser
+                    await setDoc(streamRef, {
+                      id: channel,
+                      hostId: user?.uid || 'host',
+                      hostName: user?.displayName || 'Host',
+                      hostAvatar: user?.photoURL || null,
+                      title: 'Live Stream',
+                      description: '',
+                      isActive: true,
+                      viewerCount: 0,
+                      maxViewers: 0,
+                      totalViewers: 0,
+                      participants: [],
+                      createdAt: serverTimestamp(),
+                      updatedAt: serverTimestamp(),
+                      startedAt: serverTimestamp(),
+                      lastActivity: serverTimestamp(),
+                      bannedUserIds: [],
+                    })
+                  }
+
                   const tokenData = await getToken(channel, numericUid, isHost ? 'host' : 'audience')
-                  await liveAgora.join(channel, numericUid, isHost ? 'host' : 'audience', tokenData.token)
+                  const code = await liveAgora.join(channel, numericUid, isHost ? 'host' : 'audience', tokenData.token)
+                  if (code !== 0) throw new Error(`Join failed: ${code}`)
                 } catch (e: any) {
                   setError(e?.message || 'Join failed')
                 } finally {
