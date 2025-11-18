@@ -45,22 +45,26 @@ class LiveAgora {
         this.events.onConnectionChange?.(true)
       },
       onConnectionStateChanged: (arg1: any, arg2?: any) => {
-        let state: number
-        let reason: number
+        let state: number | undefined
+        let reason: number | undefined
         if (arg1 && typeof arg1 === 'object' && 'state' in arg1) {
           const st = (arg1 as any).state
           const rs = (arg1 as any).reason
-          state = typeof st === 'number' ? st : (typeof st === 'string' ? Number(st) || 0 : 0)
-          reason = typeof rs === 'number' ? rs : (typeof rs === 'string' ? Number(rs) || 0 : 0)
+          state = typeof st === 'number' ? st : (typeof st === 'string' ? Number(st) : undefined)
+          reason = typeof rs === 'number' ? rs : (typeof rs === 'string' ? Number(rs) : undefined)
         } else {
           const st = arg1
           const rs = arg2
-          state = typeof st === 'number' ? st : (typeof st === 'string' ? Number(st) || 0 : 0)
-          reason = typeof rs === 'number' ? rs : (typeof rs === 'string' ? Number(rs) || 0 : 0)
+          state = typeof st === 'number' ? st : (typeof st === 'string' ? Number(st) : undefined)
+          reason = typeof rs === 'number' ? rs : (typeof rs === 'string' ? Number(rs) : undefined)
         }
-        const connected = state === 3
-        this.events.onConnectionChange?.(connected)
-        this.events.onConnectionEvent?.(state, reason)
+        if (typeof state === 'number') {
+          const connected = state === 3
+          this.events.onConnectionChange?.(connected)
+        }
+        if (typeof state === 'number' || typeof reason === 'number') {
+          this.events.onConnectionEvent?.(state ?? 0, reason ?? 0)
+        }
       },
       onUserJoined: (uid: number) => {
         this.events.onUserJoined?.(uid)
