@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Image, ScrollView, Dimensions, Animated, Alert } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Image, ScrollView, Dimensions, Animated, Alert, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
+import LiveAudio from './live/LiveAudio'
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLiveStreams, LiveStream } from '../context/LiveStreamContext';
 import { useAuth } from '../context/AuthContext';
@@ -368,8 +369,15 @@ const LiveStreamGrid = () => {
     .map((stream, index) => ({ ...stream, rank: index + 1 }));
   
   // Handle "Go Live" button press with complete functionality
+  const [liveOverlay, setLiveOverlay] = useState<{channel: string, isHost: boolean} | null>(null)
   const handleGoLive = async () => {
-    Alert.alert('Go Live', 'Live streaming is disabled.');
+    if (!user) {
+      Alert.alert('Sign In Required', 'You need to sign in to start a live stream.')
+      return
+    }
+    const uid = user.uid
+    const channel = `live_${uid}_${Date.now()}`
+    setLiveOverlay({ channel, isHost: true })
   };
 
   // Create button to start new stream
@@ -462,6 +470,11 @@ const LiveStreamGrid = () => {
         >
           {renderStreamRows()}
         </ScrollView>
+        <Modal visible={!!liveOverlay} animationType="slide" onRequestClose={() => setLiveOverlay(null)}>
+          {liveOverlay && (
+            <LiveAudio channel={liveOverlay.channel} uid={user?.uid || 'guest'} isHost={liveOverlay.isHost} onClose={() => setLiveOverlay(null)} />
+          )}
+        </Modal>
       </View>
     </TutorialContext.Provider>
   );
