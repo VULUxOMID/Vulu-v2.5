@@ -138,7 +138,7 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
         <Text style={styles.label}>Participants: {participants}</Text>
         <Text style={styles.debug}>State: {String(connState)} Reason: {String(connReason)}</Text>
         {error && <Text style={styles.error}>Error: {error}</Text>}
-        <View style={{ flexDirection: 'row', gap: 12 }}>
+        <View style={styles.row}>
           <TouchableOpacity style={styles.button} onPress={() => liveAgora.leave()}>
             <Text style={styles.buttonText}>Leave</Text>
           </TouchableOpacity>
@@ -209,6 +209,8 @@ const styles = StyleSheet.create({
   error: { color: '#FF6B6B', marginTop: 8 },
   button: { marginTop: 16, backgroundColor: '#6E56F7', paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
   buttonText: { color: '#FFF', fontWeight: '600' }
+  ,row: { flexDirection: 'row', alignItems: 'center' }
+  ,rowSpacing: { width: 12 }
 })
 
 export default LiveAudio
