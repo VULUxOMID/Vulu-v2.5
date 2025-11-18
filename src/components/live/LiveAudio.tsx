@@ -105,7 +105,7 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
         <Text style={styles.label}>Channel: {channel}</Text>
         <Text style={styles.label}>Role: {isHost ? 'Host' : 'Audience'}</Text>
         <Text style={styles.label}>Participants: {participants}</Text>
-        <Text style={styles.debug}>State: {connState} Reason: {connReason}</Text>
+        <Text style={styles.debug}>State: {String(connState)} Reason: {String(connReason)}</Text>
         {error && <Text style={styles.error}>Error: {error}</Text>}
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <TouchableOpacity style={styles.button} onPress={() => liveAgora.leave()}>

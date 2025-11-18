@@ -31,14 +31,32 @@ class LiveAgora {
 
   private registerEvents() {
     const handler = {
-      onJoinChannelSuccess: (channel: string, uid: number) => {
+      onJoinChannelSuccess: (arg1: any, arg2?: any) => {
+        let channel: string
+        let uid: number
+        if (arg1 && typeof arg1 === 'object' && arg1.channelId) {
+          channel = arg1.channelId
+          uid = arg1.localUid
+        } else {
+          channel = arg1 as string
+          uid = (arg2 as number) ?? 0
+        }
         this.events.onJoinSuccess?.(channel, uid)
         this.events.onConnectionChange?.(true)
       },
-      onConnectionStateChanged: (_state: number, _reason: number) => {
-        const connected = _state === 3
+      onConnectionStateChanged: (arg1: any, arg2?: any) => {
+        let state: number
+        let reason: number
+        if (arg1 && typeof arg1 === 'object' && 'state' in arg1) {
+          state = (arg1 as any).state
+          reason = (arg1 as any).reason ?? 0
+        } else {
+          state = (arg1 as number) ?? 0
+          reason = (arg2 as number) ?? 0
+        }
+        const connected = state === 3
         this.events.onConnectionChange?.(connected)
-        this.events.onConnectionEvent?.(_state, _reason)
+        this.events.onConnectionEvent?.(state, reason)
       },
       onUserJoined: (uid: number) => {
         this.events.onUserJoined?.(uid)
@@ -65,7 +83,7 @@ class LiveAgora {
     const clientRole = role === 'host' ? ClientRoleType.ClientRoleBroadcaster : ClientRoleType.ClientRoleAudience
     await this.engine.enableAudio?.()
     await this.engine.setClientRole(clientRole)
-    const res = await this.engine.joinChannel(token, channel, uid, { publishMicrophoneTrack: role === 'host' })
+    const res = await this.engine.joinChannel(token, channel, uid)
     return res
   }
 
