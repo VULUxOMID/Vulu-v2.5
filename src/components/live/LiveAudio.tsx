@@ -51,19 +51,22 @@ export const LiveAudio: React.FC<Props> = ({ channel, uid, isHost, onClose }) =>
         liveAgora.setEvents({
           onJoinSuccess: () => { if (!mountedRef.current) return; setConnected(true); setParticipants(p => Math.max(1, p)) },
           onConnectionChange: (c) => { if (!mountedRef.current) return; setConnected(c) },
-          onConnectionEvent: async (s, r) => {
-            if (!mountedRef.current) return; setConnState(Number(s)); setConnReason(Number(r))
-            // Token invalid/expired handling
-            if (r === 8 || r === 9) {
-              try {
-                setConnecting(true)
-                const tokenData = await getToken(channel, numericUid, isHost ? 'host' : 'audience')
-                await liveAgora.renewToken(tokenData.token)
-              } catch (e: any) {
-                if (!mountedRef.current) return; setError(e?.message || 'Token renewal failed')
-              } finally {
-                if (!mountedRef.current) return; setConnecting(false)
-              }
+          onConnectionEvent: (s, r) => {
+            if (!mountedRef.current) return;
+            setConnState(typeof s === 'number' ? s : 0);
+            setConnReason(typeof r === 'number' ? r : 0);
+            if (typeof r === 'number' && (r === 8 || r === 9)) {
+              setConnecting(true)
+              ;(async () => {
+                try {
+                  const tokenData = await getToken(channel, numericUid, isHost ? 'host' : 'audience')
+                  await liveAgora.renewToken(tokenData.token)
+                } catch (e: any) {
+                  if (!mountedRef.current) return; setError(e?.message || 'Token renewal failed')
+                } finally {
+                  if (!mountedRef.current) return; setConnecting(false)
+                }
+              })()
             }
           },
           onUserJoined: () => { if (!mountedRef.current) return; setParticipants(p => p + 1) },

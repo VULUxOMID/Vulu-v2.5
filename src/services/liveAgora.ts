@@ -48,11 +48,15 @@ class LiveAgora {
         let state: number
         let reason: number
         if (arg1 && typeof arg1 === 'object' && 'state' in arg1) {
-          state = (arg1 as any).state
-          reason = (arg1 as any).reason ?? 0
+          const st = (arg1 as any).state
+          const rs = (arg1 as any).reason
+          state = typeof st === 'number' ? st : (typeof st === 'string' ? Number(st) || 0 : 0)
+          reason = typeof rs === 'number' ? rs : (typeof rs === 'string' ? Number(rs) || 0 : 0)
         } else {
-          state = (arg1 as number) ?? 0
-          reason = (arg2 as number) ?? 0
+          const st = arg1
+          const rs = arg2
+          state = typeof st === 'number' ? st : (typeof st === 'string' ? Number(st) || 0 : 0)
+          reason = typeof rs === 'number' ? rs : (typeof rs === 'string' ? Number(rs) || 0 : 0)
         }
         const connected = state === 3
         this.events.onConnectionChange?.(connected)
