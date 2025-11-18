@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useLiveStreams } from '../context/LiveStreamContext';
 import { cleanupOldStreams, cleanupAllStreams } from '../utils/cleanupStreams';
-import { testStreamManagement } from '../utils/testStreamManagement';
 
 /**
  * Debug panel for stream management - only for development
@@ -109,21 +108,7 @@ const StreamDebugPanel: React.FC = () => {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.button, styles.testButton]}
-          onPress={() => testStreamManagement.runAllTests()}
-          disabled={isLoading}
-        >
-          <Text style={styles.buttonText}>Run All Tests</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.button, styles.specificTestButton]}
-          onPress={() => testStreamManagement.testEmptyStreamVisibility()}
-          disabled={isLoading}
-        >
-          <Text style={styles.buttonText}>Test Empty Streams</Text>
-        </TouchableOpacity>
+        {/* Test actions removed */}
       </View>
     </View>
   );
