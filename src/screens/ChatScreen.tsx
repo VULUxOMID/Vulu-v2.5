@@ -337,6 +337,23 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
   const [streakCount, setStreakCount] = useState<number | undefined>(undefined)
   const [isLoading, setIsLoading] = useState(true);
 
+  useEffect(() => {
+    let mounted = true
+    const loadConversationMeta = async () => {
+      try {
+        if (!conversationId) return
+        const conv = await firestoreService.getConversationById(conversationId)
+        const data: any = conv || {}
+        const streak = data.streak || {}
+        if (!mounted) return
+        setStreakActive(!!streak.active)
+        setStreakCount(typeof streak.consecutiveDays === 'number' ? streak.consecutiveDays : undefined)
+      } catch {}
+    }
+    loadConversationMeta()
+    return () => { mounted = false }
+  }, [conversationId])
+
   // Pagination state
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -1808,20 +1825,4 @@ const ChatScreenWrapper = (props: ChatScreenProps) => {
 };
 
 export default ChatScreenWrapper;
-  useEffect(() => {
-    let mounted = true
-    const loadConversationMeta = async () => {
-      try {
-        if (!conversationId) return
-        const conv = await firestoreService.getConversationById(conversationId)
-        const data: any = conv || {}
-        const streak = data.streak || {}
-        if (!mounted) return
-        setStreakActive(!!streak.active)
-        setStreakCount(typeof streak.consecutiveDays === 'number' ? streak.consecutiveDays : undefined)
-      } catch {}
-    }
-    loadConversationMeta()
-    return () => { mounted = false }
-  }, [conversationId])
 

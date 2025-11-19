@@ -176,6 +176,9 @@ class PushNotificationService {
    */
   async registerForPushNotifications(): Promise<string | null> {
     try {
+      if (Platform.OS === 'web') {
+        throw new NotificationPermissionError('device_not_supported');
+      }
       if (!Device.isDevice) {
         console.warn('Push notifications only work on physical devices');
         this.permissionStatus = 'device_not_supported';

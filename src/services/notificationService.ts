@@ -143,6 +143,10 @@ class NotificationService {
    */
   async initializePushNotifications(): Promise<void> {
     try {
+      if (Platform.OS === 'web') {
+        console.warn('Web push notifications are disabled');
+        return;
+      }
       // Configure notification behavior
       await Notifications.setNotificationHandler({
         handleNotification: async () => ({
@@ -168,6 +172,9 @@ class NotificationService {
    */
   async requestPermissions(): Promise<boolean> {
     try {
+      if (Platform.OS === 'web') {
+        return false;
+      }
       if (!Device.isDevice) {
         console.warn('Push notifications only work on physical devices');
         return false;
@@ -198,6 +205,9 @@ class NotificationService {
    */
   async registerForPushNotifications(): Promise<string | null> {
     try {
+      if (Platform.OS === 'web') {
+        return null;
+      }
       if (!Device.isDevice) {
         return null;
       }

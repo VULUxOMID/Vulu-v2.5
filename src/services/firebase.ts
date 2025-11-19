@@ -1,9 +1,10 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
-import { Auth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { Auth, initializeAuth, getReactNativePersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore, Firestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { getFunctions, Functions } from 'firebase/functions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 // Firebase configuration for VULU
 const firebaseConfig = {
@@ -45,13 +46,17 @@ const initializeFirebase = (): { success: boolean; error?: Error } => {
     app = initializeApp(firebaseConfig);
     console.log('✅ Firebase app initialized');
 
-    // Initialize Auth with AsyncStorage persistence (no top-level await)
+    // Initialize Auth with platform-specific persistence (no top-level await)
     try {
       // initializeAuth is synchronous; do NOT await it
+      const persistence = Platform.OS === 'web' 
+        ? browserLocalPersistence 
+        : getReactNativePersistence(AsyncStorage);
+      
       auth = initializeAuth(app, {
-        persistence: getReactNativePersistence(AsyncStorage)
+        persistence: persistence
       });
-      console.log('✅ Firebase Auth initialized with AsyncStorage persistence');
+      console.log(`✅ Firebase Auth initialized with ${Platform.OS === 'web' ? 'browser' : 'AsyncStorage'} persistence`);
 
       // Optional check without await (currentUser is available if restored)
       const currentUser = auth.currentUser;
@@ -64,20 +69,22 @@ const initializeFirebase = (): { success: boolean; error?: Error } => {
         console.log('ℹ️ No persisted auth state found (user not signed in)');
       }
 
-      // Test AsyncStorage availability asynchronously (non-blocking)
-      AsyncStorage.setItem('__firebase_auth_test__', 'test')
-        .then(() => AsyncStorage.getItem('__firebase_auth_test__'))
-        .then(value => {
-          if (value === 'test') {
-            console.log('✅ AsyncStorage persistence verified');
-            AsyncStorage.removeItem('__firebase_auth_test__');
-          } else {
-            console.warn('⚠️ AsyncStorage test failed - persistence may not work correctly');
-          }
-        })
-        .catch(err => {
-          console.warn('⚠️ AsyncStorage test error:', err);
-        });
+      // Test AsyncStorage availability asynchronously (non-blocking) - only on native platforms
+      if (Platform.OS !== 'web') {
+        AsyncStorage.setItem('__firebase_auth_test__', 'test')
+          .then(() => AsyncStorage.getItem('__firebase_auth_test__'))
+          .then(value => {
+            if (value === 'test') {
+              console.log('✅ AsyncStorage persistence verified');
+              AsyncStorage.removeItem('__firebase_auth_test__');
+            } else {
+              console.warn('⚠️ AsyncStorage test failed - persistence may not work correctly');
+            }
+          })
+          .catch(err => {
+            console.warn('⚠️ AsyncStorage test error:', err);
+          });
+      }
 
     } catch (authError: any) {
       console.error('❌ CRITICAL: Firebase Auth initialization failed:', authError);

@@ -1,7 +1,6 @@
 import { Audio } from 'expo-av';
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 export interface PermissionState {
@@ -114,15 +113,32 @@ class PermissionService {
 
   private async checkCurrentPermissions(): Promise<void> {
     try {
-      // Check microphone permission using expo-av Audio API
-      // This will properly check iOS microphone permissions
-      const audioStatus = await Audio.getPermissionsAsync();
-      this.permissionState.microphone = audioStatus.status === 'granted';
-      console.log('🎤 Current microphone permission status:', {
-        status: audioStatus.status,
-        granted: audioStatus.granted,
-        canAskAgain: audioStatus.canAskAgain
-      });
+      // Check microphone permission using expo-av Audio API (only on native platforms)
+      if (Platform.OS !== 'web') {
+        const audioStatus = await Audio.getPermissionsAsync();
+        this.permissionState.microphone = audioStatus.status === 'granted';
+        console.log('🎤 Current microphone permission status:', {
+          status: audioStatus.status,
+          granted: audioStatus.granted,
+          canAskAgain: audioStatus.canAskAgain
+        });
+      } else {
+        // Web platform - use browser's navigator.mediaDevices API
+        if (navigator && navigator.mediaDevices) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop()); // Stop the test stream
+            this.permissionState.microphone = true;
+            console.log('🎤 Web microphone permission granted');
+          } catch (error) {
+            this.permissionState.microphone = false;
+            console.log('🎤 Web microphone permission denied');
+          }
+        } else {
+          this.permissionState.microphone = false;
+          console.warn('⚠️ Web microphone API not available');
+        }
+      }
     } catch (error) {
       const safeMessage = error instanceof Error ? error.message : String(error);
       console.warn('⚠️ Error checking current permissions:', safeMessage);
@@ -138,36 +154,55 @@ class PermissionService {
     }
 
     try {
-      // Check current status first
-      const currentStatus = await Audio.getPermissionsAsync();
-      console.log('📋 Current microphone permission status before request:', {
-        status: currentStatus.status,
-        granted: currentStatus.granted,
-        canAskAgain: currentStatus.canAskAgain
-      });
+      if (Platform.OS === 'web') {
+        // Web platform - use browser's navigator.mediaDevices API
+        if (navigator && navigator.mediaDevices) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop()); // Stop the test stream
+            this.permissionState.microphone = true;
+            console.log('✅ Web microphone permission granted');
+          } catch (error) {
+            this.permissionState.microphone = false;
+            console.log('❌ Web microphone permission denied');
+          }
+        } else {
+          this.permissionState.microphone = false;
+          console.warn('⚠️ Web microphone API not available');
+        }
+      } else {
+        // Native platform - use expo-av Audio API
+        // Check current status first
+        const currentStatus = await Audio.getPermissionsAsync();
+        console.log('📋 Current microphone permission status before request:', {
+          status: currentStatus.status,
+          granted: currentStatus.granted,
+          canAskAgain: currentStatus.canAskAgain
+        });
 
-      // If already granted, update state and return
-      if (currentStatus.status === 'granted' || currentStatus.granted === true) {
-        console.log('✅ Microphone permission already granted');
-        this.permissionState.microphone = true;
-        this.permissionState.hasRequestedThisSession = true;
-        this.permissionState.lastRequestTime = Date.now();
-        await this.storePermissionState();
-        return this.permissionState;
+        // If already granted, update state and return
+        if (currentStatus.status === 'granted' || currentStatus.granted === true) {
+          console.log('✅ Microphone permission already granted');
+          this.permissionState.microphone = true;
+          this.permissionState.hasRequestedThisSession = true;
+          this.permissionState.lastRequestTime = Date.now();
+          await this.storePermissionState();
+          return this.permissionState;
+        }
+
+        // Request microphone permission - this will show iOS native dialog if status is 'undetermined'
+        // iOS will show the system dialog with "Allow" and "Don't Allow" options
+        console.log('🎤 Requesting microphone permission - iOS will show native dialog if needed...');
+        const audioResult = await Audio.requestPermissionsAsync();
+        
+        console.log('📋 Permission request result:', {
+          status: audioResult.status,
+          granted: audioResult.granted,
+          canAskAgain: audioResult.canAskAgain
+        });
+
+        this.permissionState.microphone = audioResult.status === 'granted' || audioResult.granted === true;
       }
-
-      // Request microphone permission - this will show iOS native dialog if status is 'undetermined'
-      // iOS will show the system dialog with "Allow" and "Don't Allow" options
-      console.log('🎤 Requesting microphone permission - iOS will show native dialog if needed...');
-      const audioResult = await Audio.requestPermissionsAsync();
-      
-      console.log('📋 Permission request result:', {
-        status: audioResult.status,
-        granted: audioResult.granted,
-        canAskAgain: audioResult.canAskAgain
-      });
-
-      this.permissionState.microphone = audioResult.status === 'granted' || audioResult.granted === true;
 
       // Update session state
       this.permissionState.hasRequestedThisSession = true;
@@ -230,8 +265,24 @@ class PermissionService {
 
   async getCurrentStatus(): Promise<{ status: string; granted: boolean; canAskAgain: boolean }> {
     try {
-      const s = await Audio.getPermissionsAsync();
-      return { status: s.status, granted: !!s.granted, canAskAgain: !!s.canAskAgain };
+      if (Platform.OS === 'web') {
+        // Web platform - use browser's navigator.mediaDevices API
+        if (navigator && navigator.mediaDevices) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop()); // Stop the test stream
+            return { status: 'granted', granted: true, canAskAgain: false };
+          } catch (error) {
+            return { status: 'denied', granted: false, canAskAgain: false };
+          }
+        } else {
+          return { status: 'unknown', granted: false, canAskAgain: false };
+        }
+      } else {
+        // Native platform - use expo-av Audio API
+        const s = await Audio.getPermissionsAsync();
+        return { status: s.status, granted: !!s.granted, canAskAgain: !!s.canAskAgain };
+      }
     } catch {
       return { status: 'unknown', granted: false, canAskAgain: true };
     }
@@ -239,7 +290,20 @@ class PermissionService {
 
   async openSystemSettings(): Promise<void> {
     try {
-      await Linking.openSettings();
+      if (Platform.OS === 'web') {
+        // Web platform - show browser permission prompt or settings
+        if (navigator && navigator.mediaDevices) {
+          try {
+            await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log('✅ Web microphone permission requested');
+          } catch (error) {
+            console.warn('⚠️ Web microphone permission denied');
+          }
+        }
+      } else {
+        // Native platform - open system settings
+        await Linking.openSettings();
+      }
     } catch (e) {
       console.warn('⚠️ Failed to open system settings:', e);
     }

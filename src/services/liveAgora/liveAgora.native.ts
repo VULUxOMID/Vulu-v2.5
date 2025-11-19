@@ -1,6 +1,6 @@
 import { createAgoraRtcEngine, ChannelProfileType, ClientRoleType } from 'react-native-agora'
 
-type Role = 'host' | 'audience'
+export type Role = 'host' | 'audience'
 
 export type LiveEvents = {
   onJoinSuccess?: (channel: string, uid: number) => void

@@ -185,8 +185,8 @@ const HomeScreen = () => {
   });
   const [isLoadingCurrency, setIsLoadingCurrency] = useState(false);
 
-  // Get user data from Firebase
-  const { userProfile } = useAuth();
+  // Get user/auth data from Firebase
+  const { user, isGuest, signOut, userProfile } = useAuth();
   // Gold balance now comes from currencyBalances state (loaded from Firebase)
   const goldBalance = currencyBalances.gold;
 
@@ -2357,7 +2357,6 @@ const HomeScreen = () => {
   // Virtual currency state moved up to be available earlier
 
   // Get auth and guest restrictions
-  const { user, isGuest, signOut } = useAuth();
   const { canSendMessages, handleGuestRestriction } = useGuestRestrictions();
 
   // Calculate actual children count for layout
