@@ -68,6 +68,9 @@ if (__DEV__) {
 
   // Add global error handler for animation errors
   const originalConsoleError = console.error;
+  const originalConsoleWarn = console.warn;
+  const originalConsoleLog = console.log;
+  const originalConsoleInfo = console.info;
   console.error = function(...args: any[]) {
     const errorMessage = args[0]?.toString() || '';
     
@@ -81,9 +84,62 @@ if (__DEV__) {
       console.warn('[Animation Warning - Safe to Ignore]:', ...args);
       return;
     }
+    // Suppress Firestore listen aborts during HMR/reload
+    if (
+      errorMessage.includes('net::ERR_ABORTED') ||
+      errorMessage.includes('google.firestore.v1.Firestore/Listen/channel')
+    ) {
+      return;
+    }
+    // Suppress web push VAPID warnings in web dev
+    if (errorMessage.includes('notification.vapidPublicKey')) {
+      return;
+    }
+    // Suppress setState on unmounted component during HMR
+    if (errorMessage.includes("Can't perform a React state update on a component that hasn't mounted yet")) {
+      return;
+    }
     
     // Pass through all other errors
     originalConsoleError.apply(console, args);
+  };
+
+  const suppressedPatterns = [
+    'Logs will appear in the browser console',
+    'Expo Router',
+    'Fast Refresh will perform a full reload',
+    'Require cycle:',
+    'VirtualizedLists should never be nested',
+    'Non-serializable values were found in the navigation state',
+    'Encountered an error loading content',
+  ];
+
+  const recentMap: Map<string, number> = new Map();
+  const shouldSuppress = (msg: string) => suppressedPatterns.some(p => msg.includes(p));
+  const throttle = (msg: string) => {
+    const now = Date.now();
+    const last = recentMap.get(msg) || 0;
+    if (now - last < 2000) return true;
+    recentMap.set(msg, now);
+    return false;
+  };
+
+  console.warn = function(...args: any[]) {
+    const msg = (args[0]?.toString() || '').trim();
+    if (shouldSuppress(msg) || throttle(msg)) return;
+    originalConsoleWarn.apply(console, args);
+  };
+
+  console.log = function(...args: any[]) {
+    const msg = (args[0]?.toString() || '').trim();
+    if (shouldSuppress(msg) || throttle(msg)) return;
+    originalConsoleLog.apply(console, args);
+  };
+
+  console.info = function(...args: any[]) {
+    const msg = (args[0]?.toString() || '').trim();
+    if (shouldSuppress(msg) || throttle(msg)) return;
+    originalConsoleInfo.apply(console, args);
   };
 }
 
@@ -93,6 +149,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
+import { LogBox } from 'react-native';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -145,6 +202,16 @@ export default function RootLayout() {
       const { setupIOSErrorSuppression } = require('../src/utils/iosErrorSuppressor');
       setupIOSErrorSuppression();
     }
+
+    LogBox.ignoreLogs([
+      'notification.vapidPublicKey',
+      'net::ERR_ABORTED',
+      'Firestore/Listen/channel',
+      "Can't perform a React state update on a component that hasn't mounted yet",
+      'Require cycle:',
+      'VirtualizedLists should never be nested',
+      'Non-serializable values were found in the navigation state',
+    ]);
   }, []);
 
   if (!loaded) {
