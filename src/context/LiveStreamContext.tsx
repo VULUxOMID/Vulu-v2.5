@@ -114,16 +114,37 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
         const isVisible = (!!data.isActive) && hostConnected
         // Grace period for fresh streams: do NOT delete immediately while host is connecting
         const ageMs = startedMs > 0 ? (Date.now() - startedMs) : 0
-        if (!!data.isActive && !hostConnected && viewerCount <= 0 && ageMs > 15 * 1000) {
-          try {
-            await deleteDoc(doc(db, 'streams', d.id))
-          } catch {
+        const timeSinceLastActivity = lastActivityMs > 0 ? (Date.now() - lastActivityMs) : Infinity
+        
+        // Cleanup streams with no viewers where:
+        // 1. Host is not connected, OR
+        // 2. Host appears connected but hasn't sent activity in 60+ seconds (stale)
+        if (!!data.isActive && viewerCount <= 0) {
+          const isHostDisconnected = !hostConnected && ageMs > 15 * 1000
+          const isHostStale = hostConnected && timeSinceLastActivity > 60 * 1000
+          
+          if (isHostDisconnected || isHostStale) {
             try {
-              await updateDoc(doc(db, 'streams', d.id), { isActive: false, updatedAt: serverTimestamp(), endedAt: serverTimestamp() })
-            } catch {}
+              await deleteDoc(doc(db, 'streams', d.id))
+            } catch {
+              try {
+                await updateDoc(doc(db, 'streams', d.id), { 
+                  isActive: false, 
+                  hostConnected: false, 
+                  updatedAt: serverTimestamp(), 
+                  endedAt: serverTimestamp() 
+                })
+              } catch {}
+            }
+            return
           }
+        }
+        
+        // Also hide stale streams from the list (even if cleanup fails)
+        if (hostConnected && viewerCount === 0 && timeSinceLastActivity > 60 * 1000) {
           return
         }
+        
         if (!isVisible) return
         list.push({
           id: d.id,
