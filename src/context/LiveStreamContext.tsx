@@ -90,10 +90,15 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
   const { user } = authContext || { user: null };
 
   useEffect(() => {
-    const q = query(collection(db, 'streams'), where('isActive', '==', true));
-    const unsub = onSnapshot(q, (snap) => {
-      const list: LiveStream[] = [];
-      snap.forEach(async d => {
+    if (!db) {
+      return;
+    }
+    let unsub: (() => void) | undefined;
+    try {
+      const q = query(collection(db, 'streams'), where('isActive', '==', true));
+      unsub = onSnapshot(q, (snap) => {
+        const list: LiveStream[] = [];
+        snap.forEach(async d => {
         const data = d.data() as any;
         const host = {
           name: data.hostName || 'Host',
@@ -132,8 +137,11 @@ export const LiveStreamProvider: React.FC<{ children: ReactNode }> = ({ children
         });
       });
       setStreams(list);
-    });
-    return () => { unsub(); };
+      });
+    } catch (e) {
+      // Ignore initialization-time errors in web dev; will retry on next render
+    }
+    return () => { try { unsub?.(); } catch {} };
   }, []);
 
   // Categorize streams for easier access

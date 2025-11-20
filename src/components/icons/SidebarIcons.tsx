@@ -1,5 +1,5 @@
 import React from 'react';
-import Svg, { Path, Circle, Rect, G, Defs, Filter, FeGaussianBlur, FeColorMatrix } from 'react-native-svg';
+import Svg, { Path, Circle, Rect, G, Defs, Filter, FeGaussianBlur, FeColorMatrix, FeFlood, FeOffset, FeComposite, FeBlend } from 'react-native-svg';
 
 interface IconProps {
   color: string;
@@ -8,17 +8,26 @@ interface IconProps {
 }
 
 export const ChatIcon: React.FC<IconProps> = ({ color, size = 24, active = false }) => {
+  const width = size;
+  const height = Math.round((size * 23) / 24);
+  const fillColor = active ? '#FFFFFF' : color;
   return (
-    <Svg width={size} height={(size * 23) / 24} viewBox="0 0 24 23" fill="none">
+    <Svg width={width} height={height} viewBox="0 0 24 23" fill="none">
       <Defs>
-        <Filter id="chatGlow" x="-50%" y="-50%" width="200%" height="200%">
-          <FeGaussianBlur stdDeviation="0.5" />
+        <Filter id="chatDropShadow" x="-50%" y="-50%" width="200%" height="200%">
+          <FeFlood floodOpacity="0" />
+          <FeColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
+          <FeOffset dy="2" />
+          <FeGaussianBlur stdDeviation={active ? 0.8 : 0.5} />
+          <FeComposite in2="SourceAlpha" operator="out" />
           <FeColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
+          <FeBlend mode="plus-darker" in2="BackgroundImageFix" />
+          <FeBlend mode="normal" in="SourceGraphic" />
         </Filter>
       </Defs>
-      <G filter="url(#chatGlow)">
-        <Path d="M19.1818 8.36364C19.1818 6.14546 18.3007 4.01814 16.7322 2.44965C15.1637 0.881166 13.0364 0 10.8182 0C8.60001 0 6.47268 0.881166 4.9042 2.44965C3.33571 4.01814 2.45454 6.14546 2.45454 8.36364C2.45454 9.81818 2.69697 11.0303 3.18182 12C1.72727 12.9697 1 13.9394 1 14.9091C1 15.3939 1.48485 15.6364 2.45454 15.6364H7.54546C6.09091 9.81818 12.6364 4 19.1818 8.36364Z" fill={color} />
-        <Path d="M20.6364 14.1818C20.6364 12.6387 20.0234 11.1589 18.9323 10.0677C17.8411 8.97662 16.3613 8.36364 14.8182 8.36364C13.2751 8.36364 11.7952 8.97662 10.7041 10.0677C9.61298 11.1589 9 12.6387 9 14.1818C9 15.7249 9.61298 17.2048 10.7041 18.2959C11.7952 19.387 13.2751 20 14.8182 20H20.6364C21.6061 20 22.0909 19.7576 22.0909 19.2727C22.0909 18.3567 21.4419 17.4406 20.1438 16.5246C20.4656 15.7932 20.6364 14.9963 20.6364 14.1818Z" fill={color} />
+      <G filter="url(#chatDropShadow)">
+        <Path d="M19.1818 8.36364C19.1818 6.14546 18.3007 4.01814 16.7322 2.44965C15.1637 0.881166 13.0364 0 10.8182 0C8.60001 0 6.47268 0.881166 4.9042 2.44965C3.33571 4.01814 2.45454 6.14546 2.45454 8.36364C2.45454 9.81818 2.69697 11.0303 3.18182 12C1.72727 12.9697 1 13.9394 1 14.9091C1 15.3939 1.48485 15.6364 2.45454 15.6364H7.54546C6.09091 9.81818 12.6364 4 19.1818 8.36364Z" fill={fillColor} />
+        <Path d="M20.6364 14.1818C20.6364 12.6387 20.0234 11.1589 18.9323 10.0677C17.8411 8.97662 16.3613 8.36364 14.8182 8.36364C13.2751 8.36364 11.7952 8.97662 10.7041 10.0677C9.61298 11.1589 9 12.6387 9 14.1818C9 15.7249 9.61298 17.2048 10.7041 18.2959C11.7952 19.387 13.2751 20 14.8182 20H20.6364C21.6061 20 22.0909 19.7576 22.0909 19.2727C22.0909 18.3567 21.4419 17.4406 20.1438 16.5246C20.4656 15.7932 20.6364 14.9963 20.6364 14.1818Z" fill={fillColor} />
       </G>
     </Svg>
   );
@@ -36,22 +45,22 @@ export const LiveIcon: React.FC<IconProps> = ({ color, size = 24, active = false
 );
 
 export const MusicIcon: React.FC<IconProps> = ({ color, size = 24, active = false }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Circle 
-      cx="5.5" 
-      cy="17.5" 
-      r="2.5" 
-      stroke={color}
-      strokeWidth={active ? 2.2 : 1.8}
-      fill="none"
-    />
-    <Path
-      d="M8 17.5V6L21 3V15.5"
-      stroke={color}
-      strokeWidth={active ? 2.2 : 1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+  <Svg width={size} height={size} viewBox="0 0 22 22" fill="none">
+    <Defs>
+      <Filter id="musicDropShadow" x="-50%" y="-50%" width="200%" height="200%">
+        <FeFlood floodOpacity="0" />
+        <FeColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
+        <FeOffset dy="2" />
+        <FeGaussianBlur stdDeviation="0.5" />
+        <FeComposite in2="SourceAlpha" operator="out" />
+        <FeColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
+        <FeBlend mode="plus-darker" in2="BackgroundImageFix" />
+        <FeBlend mode="normal" in="SourceGraphic" />
+      </Filter>
+    </Defs>
+    <G filter="url(#musicDropShadow)">
+      <Path d="M11 0C5.486 0 1 4.26074 1 9.50002V17.1C1 18.1488 1.895 19 3 19H5C6.104 19 7 18.1488 7 17.1V14.25C7 13.2012 6.104 12.35 5 12.35H3V9.50002C3 5.30859 6.589 1.9 11 1.9C15.411 1.9 19 5.30859 19 9.50002V12.35H17C15.896 12.35 15 13.2012 15 14.25V17.1C15 18.1488 15.896 19 17 19H19C20.104 19 21 18.1488 21 17.1V9.50002C21 4.26074 16.514 0 11 0Z" fill={active ? '#FFFFFF' : color} />
+    </G>
   </Svg>
 );
 
@@ -66,41 +75,79 @@ export const GoldMinerIcon: React.FC<IconProps> = ({ color, size = 24, active = 
   );
 };
 
-export const SlotsIcon: React.FC<IconProps> = ({ color, size = 24, active = false }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm1 2v14h14V5H5zm2 6h10v2H7v-2z"
-      stroke={color}
-      strokeWidth={active ? 2.2 : 1.8}
-      fill="none"
-    />
-  </Svg>
-);
+export const SlotsIcon: React.FC<IconProps> = ({ color, size = 24, active = false }) => {
+  const fillColor = active ? '#FFFFFF' : color;
+  const reelColor = active ? '#1C1D23' : '#D2D6DC';
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Defs>
+        <Filter id="slotsDropShadow" x="-50%" y="-50%" width="200%" height="200%">
+          <FeFlood floodOpacity="0" />
+          <FeColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
+          <FeOffset dy="2" />
+          <FeGaussianBlur stdDeviation="0.5" />
+          <FeComposite in2="SourceAlpha" operator="out" />
+          <FeColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
+          <FeBlend mode="plus-darker" in2="BackgroundImageFix" />
+          <FeBlend mode="normal" in="SourceGraphic" />
+        </Filter>
+      </Defs>
+      <G filter="url(#slotsDropShadow)">
+        <Rect x="2" y="4" width="16" height="12" rx="2" fill={fillColor} />
+        <Rect x="4" y="7" width="3.5" height="6" rx="1" fill={reelColor} />
+        <Rect x="9" y="7" width="3.5" height="6" rx="1" fill={reelColor} />
+        <Rect x="14" y="7" width="3.5" height="6" rx="1" fill={reelColor} />
+        <Circle cx="20" cy="7" r="1.6" fill={fillColor} />
+        <Path d="M20 8.8V14.8" stroke={fillColor} strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" />
+      </G>
+    </Svg>
+  );
+};
 
 export const LeaderboardIcon: React.FC<IconProps> = ({ color, size = 24, active = false }) => {
   const height = size * (21 / 23);
   return (
     <Svg width={size} height={height} viewBox="0 0 23 21" fill="none">
       <Defs>
-        <Filter id="leaderGlow" x="-50%" y="-50%" width="200%" height="200%">
+        <Filter id="leaderDropShadow" x="-50%" y="-50%" width="200%" height="200%">
+          <FeFlood floodOpacity="0" />
+          <FeColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
+          <FeOffset dy="2" />
           <FeGaussianBlur stdDeviation="0.5" />
+          <FeComposite in2="SourceAlpha" operator="out" />
           <FeColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
+          <FeBlend mode="plus-darker" in2="BackgroundImageFix" />
+          <FeBlend mode="normal" in="SourceGraphic" />
         </Filter>
       </Defs>
-      <G filter="url(#leaderGlow)">
-        <Path d="M12.6091 1.85028L11.8347 0.216615C11.7067 -0.0670556 11.3064 -0.0773087 11.1653 0.216615L10.3909 1.85028L8.67484 2.10661C8.36969 2.15446 8.23844 2.5475 8.46484 2.78332L9.71172 4.04787L9.41641 5.8285C9.37047 6.14635 9.68547 6.39243 9.96766 6.24546L11.5066 5.39787L13.0356 6.23179C13.3178 6.37875 13.6361 6.13268 13.5869 5.81483L13.2916 4.0342L14.5384 2.78332C14.7616 2.55091 14.6336 2.15788 14.3284 2.10661L12.6123 1.85028H12.6091ZM9.4 8.75065C8.81922 8.75065 8.35 9.23938 8.35 9.84432V16.4063C8.35 17.0113 8.81922 17.5 9.4 17.5H13.6C14.1808 17.5 14.65 17.0113 14.65 16.4063V9.84432C14.65 9.23938 14.1808 8.75065 13.6 8.75065H9.4ZM2.05 10.938C1.46922 10.938 1 11.4267 1 12.0317V16.4063C1 17.0113 1.46922 17.5 2.05 17.5H6.25C6.83078 17.5 7.3 17.0113 7.3 16.4063V12.0317C7.3 11.4267 6.83078 10.938 6.25 10.938H2.05ZM15.7 14.219V16.4063C15.7 17.0113 16.1692 17.5 16.75 17.5H20.95C21.5308 17.5 22 17.0113 22 16.4063V14.219C22 13.6141 21.5308 13.1253 20.95 13.1253H16.75C16.1692 13.1253 15.7 13.6141 15.7 14.219Z" fill={color} />
+      <G filter="url(#leaderDropShadow)">
+        <Path
+          d="M12.6091 1.85028L11.8347 0.216615C11.7067 -0.0670556 11.3064 -0.0773087 11.1653 0.216615L10.3909 1.85028L8.67484 2.10661C8.36969 2.15446 8.23844 2.5475 8.46484 2.78332L9.71172 4.04787L9.41641 5.8285C9.37047 6.14635 9.68547 6.39243 9.96766 6.24546L11.5066 5.39787L13.0356 6.23179C13.3178 6.37875 13.6361 6.13268 13.5869 5.81483L13.2916 4.0342L14.5384 2.78332C14.7616 2.55091 14.6336 2.15788 14.3284 2.10661L12.6123 1.85028H12.6091ZM9.4 8.75065C8.81922 8.75065 8.35 9.23938 8.35 9.84432V16.4063C8.35 17.0113 8.81922 17.5 9.4 17.5H13.6C14.1808 17.5 14.65 17.0113 14.65 16.4063V9.84432C14.65 9.23938 14.1808 8.75065 13.6 8.75065H9.4ZM2.05 10.938C1.46922 10.938 1 11.4267 1 12.0317V16.4063C1 17.0113 1.46922 17.5 2.05 17.5H6.25C6.83078 17.5 7.3 17.0113 7.3 16.4063V12.0317C7.3 11.4267 6.83078 10.938 6.25 10.938H2.05ZM15.7 14.219V16.4063C15.7 17.0113 16.1692 17.5 16.75 17.5H20.95C21.5308 17.5 22 17.0113 22 16.4063V14.219C22 13.6141 21.5308 13.1253 20.95 13.1253H16.75C16.1692 13.1253 15.7 13.6141 15.7 14.219Z"
+          fill={active ? '#FFFFFF' : color}
+          shapeRendering="crispEdges"
+        />
       </G>
     </Svg>
   );
 };
 
 export const ShopIcon: React.FC<IconProps> = ({ color, size = 24, active = false }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"
-      stroke={color}
-      strokeWidth={active ? 2.2 : 1.8}
-      fill="none"
-    />
+  <Svg width={size} height={Math.round((size * 19) / 20)} viewBox="0 0 20 19" fill="none">
+    <Defs>
+      <Filter id="shopDropShadow" x="-50%" y="-50%" width="200%" height="200%">
+        <FeFlood floodOpacity="0" />
+        <FeColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
+        <FeOffset dy="2" />
+        <FeGaussianBlur stdDeviation="0.5" />
+        <FeComposite in2="SourceAlpha" operator="out" />
+        <FeColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
+        <FeBlend mode="plus-darker" in2="BackgroundImageFix" />
+        <FeBlend mode="normal" in="SourceGraphic" />
+      </Filter>
+    </Defs>
+    <G filter="url(#shopDropShadow)">
+      <Path d="M18.9668 5.03779C18.9667 5.03779 18.9667 5.03779 18.9667 5.03777L16.7115 1.0209C16.3575 0.390349 15.6907 0 14.9676 0H4.9658C4.24273 0 3.57597 0.390276 3.22194 1.02074L1.22294 4.58053C1.055 4.87959 0.948503 5.22125 1.0261 5.55535C1.23138 6.43911 1.9443 7.11111 2.76718 7.11111C3.74403 7.11111 4.56757 6.22223 4.56757 5.03666C4.56757 6.16221 5.39013 7.11111 6.36796 7.11111C7.34481 7.11111 8.16835 6.22223 8.16835 5.03666C8.16835 6.16221 8.9909 7.11111 9.96874 7.11111C10.9456 7.11111 11.7691 6.22223 11.7691 5.03666C11.7691 6.16221 12.5917 7.11111 13.5695 7.11111C14.5464 7.11111 15.3699 6.22223 15.3699 5.03666C15.3699 6.16221 16.1925 7.11111 17.1703 7.11111C18.1442 7.11111 18.9668 6.22225 18.9668 5.03782C18.9668 5.0378 18.9668 5.03778 18.9668 5.03779Z" fill={active ? '#FFFFFF' : color} />
+      <Path d="M17.1671 9.48251C16.4362 9.48251 15.6241 9.99455 15.6241 10.7254V10.9097C15.6241 11.5121 15.1358 12.0005 14.5334 12.0005H13.9668H11.9668H9.9668H7.9668H5.9668L5.46501 12.0257C4.83609 12.0574 4.30883 11.556 4.30883 10.9263V10.7254C4.30883 9.99455 3.4968 9.48251 2.76593 9.48251C2.51494 9.48251 2.25195 9.69275 2.25195 9.94374V13.3181C2.25195 14.7994 3.45278 16.0003 4.93407 16.0003H15.0086C16.4841 16.0003 17.6802 14.8043 17.6804 13.3288L17.6809 9.94281C17.681 9.69247 17.4174 9.48251 17.1671 9.48251Z" fill={active ? '#FFFFFF' : color} />
+    </G>
   </Svg>
 );

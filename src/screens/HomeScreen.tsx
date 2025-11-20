@@ -2349,6 +2349,7 @@ const HomeScreen = () => {
   const [globalChatInput, setGlobalChatInput] = useState('');
   const [isLoadingGlobalChat, setIsLoadingGlobalChat] = useState(false);
   const [globalChatError, setGlobalChatError] = useState<string | null>(null);
+  const globalChatScrollRef = useRef<ScrollView>(null);
 
   // State for Friend Activities
   const [friendActivities, setFriendActivities] = useState<FriendActivity[]>([]);
@@ -2730,8 +2731,10 @@ const HomeScreen = () => {
 
             {/* Chat Messages */}
             <ScrollView
+              ref={globalChatScrollRef}
               style={styles.chatMessagesContainer}
               showsVerticalScrollIndicator={false}
+              onContentSizeChange={() => globalChatScrollRef.current?.scrollToEnd({ animated: false })}
             >
               {isLoadingGlobalChat ? (
                 <View style={styles.loadingContainer}>
@@ -2744,7 +2747,7 @@ const HomeScreen = () => {
                   <Text style={styles.emptySubtext}>Be the first to start the conversation!</Text>
                 </View>
               ) : (
-                globalChatMessages.map((message) => (
+                [...globalChatMessages].reverse().map((message) => (
                   <View key={message.id} style={styles.chatMessageContainer}>
                     <View style={[styles.chatAvatarContainer, {backgroundColor: '#6E69F4'}]}>
                       {message.senderAvatar ? (

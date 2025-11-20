@@ -1,6 +1,6 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { Auth, initializeAuth, getReactNativePersistence, browserLocalPersistence } from 'firebase/auth';
-import { getFirestore, Firestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, Firestore, connectFirestoreEmulator, setLogLevel } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { getFunctions, Functions } from 'firebase/functions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -98,9 +98,15 @@ const initializeFirebase = (): { success: boolean; error?: Error } => {
       throw new Error(`Auth persistence required but failed: ${authError.message}`);
     }
 
-    // Initialize Firestore
-    db = getFirestore(app);
+    db = initializeFirestore(app, {
+      useFetchStreams: true,
+      experimentalAutoDetectLongPolling: true,
+    });
     console.log('✅ Firestore initialized');
+
+    try {
+      setLogLevel('silent');
+    } catch {}
 
     // Initialize Storage
     storage = getStorage(app);

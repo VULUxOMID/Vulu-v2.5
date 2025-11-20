@@ -1,0 +1,46 @@
+[debug] [2025-11-20T07:11:39.347Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-11-20T07:11:39.351Z] > authorizing via signed-in user (vulu.studio@gmail.com)
+[debug] [2025-11-20T07:11:39.363Z] Checked if tokens are valid: false, expires at: 1763358119092
+[debug] [2025-11-20T07:11:39.363Z] Checked if tokens are valid: false, expires at: 1763358119092
+[debug] [2025-11-20T07:11:39.364Z] > refreshing access token with scopes: []
+[debug] [2025-11-20T07:11:39.366Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2025-11-20T07:11:39.367Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-11-20T07:11:39.371Z] Checked if tokens are valid: false, expires at: 1763358119092
+[debug] [2025-11-20T07:11:39.371Z] Checked if tokens are valid: false, expires at: 1763358119092
+[debug] [2025-11-20T07:11:39.371Z] > refreshing access token with scopes: []
+[debug] [2025-11-20T07:11:39.373Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2025-11-20T07:11:39.373Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-11-20T07:11:39.529Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2025-11-20T07:11:39.529Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-11-20T07:11:39.547Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseio.com [none]
+[debug] [2025-11-20T07:11:39.547Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseio.com x-goog-quota-user=projects/vulugo
+[debug] [2025-11-20T07:11:39.550Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2025-11-20T07:11:39.550Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-11-20T07:11:39.563Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseapphosting.googleapis.com [none]
+[debug] [2025-11-20T07:11:39.563Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseapphosting.googleapis.com x-goog-quota-user=projects/vulugo
+[debug] [2025-11-20T07:11:40.146Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-11-20T07:11:40.146Z] > authorizing via signed-in user (vulu.studio@gmail.com)
+[debug] [2025-11-20T07:11:40.149Z] Checked if tokens are valid: true, expires at: 1763626298550
+[debug] [2025-11-20T07:11:40.149Z] Checked if tokens are valid: true, expires at: 1763626298550
+[debug] [2025-11-20T07:11:40.149Z] Checked if tokens are valid: true, expires at: 1763626298550
+[debug] [2025-11-20T07:11:40.149Z] Checked if tokens are valid: true, expires at: 1763626298550
+[debug] [2025-11-20T07:11:40.149Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseapphosting.googleapis.com [none]
+[debug] [2025-11-20T07:11:40.149Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseapphosting.googleapis.com x-goog-quota-user=projects/vulugo
+[debug] [2025-11-20T07:11:40.150Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseio.com [none]
+[debug] [2025-11-20T07:11:40.150Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseio.com x-goog-quota-user=projects/vulugo
+[debug] [2025-11-20T07:11:40.390Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseio.com 403
+[debug] [2025-11-20T07:11:40.390Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseio.com [omitted]
+[debug] [2025-11-20T07:11:40.519Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseapphosting.googleapis.com 200
+[debug] [2025-11-20T07:11:40.520Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseapphosting.googleapis.com [omitted]
+[debug] [2025-11-20T07:11:41.110Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseio.com 403
+[debug] [2025-11-20T07:11:41.111Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseio.com [omitted]
+[debug] [2025-11-20T07:11:41.353Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseapphosting.googleapis.com 200
+[debug] [2025-11-20T07:11:41.354Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/vulugo/services/firebaseapphosting.googleapis.com [omitted]
+[debug] [2025-11-20T07:11:41.407Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-11-20T07:11:41.407Z] > authorizing via signed-in user (vulu.studio@gmail.com)
+[debug] [2025-11-20T07:11:41.409Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-11-20T07:11:41.409Z] > authorizing via signed-in user (vulu.studio@gmail.com)
+[debug] [2025-11-20T07:11:41.469Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-11-20T07:11:41.469Z] > authorizing via signed-in user (vulu.studio@gmail.com)
+[debug] [2025-11-20T07:11:41.471Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-11-20T07:11:41.471Z] > authorizing via signed-in user (vulu.studio@gmail.com)

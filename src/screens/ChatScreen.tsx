@@ -622,7 +622,8 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
         clearError();
 
         // Create or get conversation using new messaging service
-        const newConversationId = await messagingService.createOrGetConversation(
+        let createdConversationId: string = ''
+        createdConversationId = await messagingService.createOrGetConversation(
           currentUser.uid,
           userId,
           currentUser.displayName || 'You',
@@ -633,18 +634,18 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
 
         if (!isMounted) return;
 
-        setConversationId(newConversationId);
+        setConversationId(createdConversationId);
 
         // Clear notifications for this conversation
-        clearConversationNotifications(newConversationId).catch(error => {
+        clearConversationNotifications(createdConversationId).catch(error => {
           console.warn('Failed to clear conversation notifications:', error);
         });
 
         // Local-first: try cached messages for instant render
-        let initialMessages: DirectMessage[] | null = await messageCacheService.getCachedMessages(newConversationId);
+        let initialMessages: DirectMessage[] | null = await messageCacheService.getCachedMessages(createdConversationId);
 
         // Network fetch in background; fall back if no cache
-        const messageResult = await messagingService.getConversationMessages(newConversationId, 30);
+        const messageResult = await messagingService.getConversationMessages(createdConversationId, 30);
         const networkMessages = messageResult.messages.filter((msg: DirectMessage) => !isDeletedForUser(msg));
 
         // If no cache, use network immediately; otherwise update state when network returns
@@ -658,13 +659,13 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
           setMessageCursor(messageResult.nextCursor);
 
           // Cache freshest from network for next open
-          messageCacheService.cacheMessages(newConversationId, networkMessages).catch(() => {});
+          messageCacheService.cacheMessages(createdConversationId, networkMessages).catch(() => {});
 
           setTimeout(() => { scrollToBottom(); }, 200);
         }
 
         // Set up real-time listener for messages
-        unsubscribeMessages = messagingService.onConversationMessages(newConversationId, (newMessages: DirectMessage[]) => {
+        unsubscribeMessages = messagingService.onConversationMessages(createdConversationId, (newMessages: DirectMessage[]) => {
           if (!isMounted) return;
 
           // Convert messages to unified format, filtering out deleted messages
@@ -689,7 +690,7 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
         // Set up real-time listener for conversation updates (typing indicators)
         const conversationUnsubscribe = messagingService.onUserConversations(currentUser.uid, (conversations) => {
           if (!isMounted) return;
-          const currentConversation = conversations.find(conv => conv.id === newConversationId);
+          const currentConversation = conversations.find(conv => conv.id === createdConversationId);
           if (currentConversation) {
             // Check if other user is typing
             const otherUserTypingTimestamp = currentConversation.typingUsers[userId];
@@ -706,7 +707,7 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
         });
 
         // Mark messages as read when conversation loads
-        await messagingService.markMessagesAsRead(newConversationId, currentUser.uid);
+        await messagingService.markMessagesAsRead(createdConversationId, currentUser.uid);
 
         // Set up presence tracking for the other user
         const presenceUnsubscribe = presenceService.onUserPresence(userId, (userData) => {
@@ -732,7 +733,7 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
         reportError(error, {
           action: 'loadConversation',
           userId,
-          conversationId: newConversationId,
+          conversationId: conversationId || undefined,
           component: 'ChatScreen'
         });
 

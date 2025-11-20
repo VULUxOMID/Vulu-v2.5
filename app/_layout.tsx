@@ -87,7 +87,14 @@ if (__DEV__) {
     // Suppress Firestore listen aborts during HMR/reload
     if (
       errorMessage.includes('net::ERR_ABORTED') ||
-      errorMessage.includes('google.firestore.v1.Firestore/Listen/channel')
+      errorMessage.includes('google.firestore.v1.Firestore/Listen/channel') ||
+      errorMessage.includes('google.firestore.v1.Firestore/Write/channel')
+    ) {
+      return;
+    }
+    if (
+      errorMessage.includes('Unexpected text node') ||
+      errorMessage.includes('text node cannot be a child of a <View>')
     ) {
       return;
     }
@@ -207,6 +214,9 @@ export default function RootLayout() {
       'notification.vapidPublicKey',
       'net::ERR_ABORTED',
       'Firestore/Listen/channel',
+      'Firestore/Write/channel',
+      'Unexpected text node',
+      'text node cannot be a child of a <View>',
       "Can't perform a React state update on a component that hasn't mounted yet",
       'Require cycle:',
       'VirtualizedLists should never be nested',
