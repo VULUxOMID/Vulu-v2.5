@@ -333,6 +333,7 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
   // Real chat state
   const [messages, setMessages] = useState<UnifiedMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0); // Key to force reload on retry
   const [streakActive, setStreakActive] = useState(false)
   const [streakCount, setStreakCount] = useState<number | undefined>(undefined)
   const [isLoading, setIsLoading] = useState(true);
@@ -613,6 +614,7 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
   useEffect(() => {
     let isMounted = true;
     let unsubscribeMessages: (() => void) | null = null;
+    let cleanupConversationId: string | null = null;
 
     const loadConversation = async () => {
       if (!currentUser || !userId) return;
@@ -634,6 +636,7 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
 
         if (!isMounted) return;
 
+        cleanupConversationId = createdConversationId;
         setConversationId(createdConversationId);
 
         // Clear notifications for this conversation
@@ -761,7 +764,7 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
 
     // Comprehensive cleanup function
     return () => {
-      console.log('🧹 ChatScreen cleanup started for conversation:', conversationId);
+      console.log('🧹 ChatScreen cleanup started for conversation:', cleanupConversationId || conversationId);
       isMounted = false;
 
       // Clean up message listener
@@ -774,10 +777,10 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
       }
 
       // Clean up conversation-specific listeners
-      if (conversationId) {
+      if (cleanupConversationId) {
         try {
-          chatSubscriptionManager.unsubscribe(`conversation-${conversationId}`);
-          messagingService.cleanupConversationListeners(conversationId);
+          chatSubscriptionManager.unsubscribe(`conversation-${cleanupConversationId}`);
+          messagingService.cleanupConversationListeners(cleanupConversationId);
         } catch (error) {
           console.warn('Error cleaning up conversation listeners:', error);
         }
@@ -791,7 +794,7 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
 
       console.log('✅ ChatScreen cleanup completed');
     };
-  }, [userId, currentUser, name, avatar]);
+  }, [userId, currentUser, name, avatar, retryKey]);
 
   // Chat functionality references and handlers
   const flatListRef = useRef<FlatList>(null);
@@ -1396,10 +1399,8 @@ const ChatScreenInternal = ({ userId, name, avatar, goBack, goToDMs, source }: C
             error={error}
             onRetry={() => {
               clearError();
-              // Reload the conversation by resetting the effect
-              setIsLoading(true);
-              setMessages([]);
-              setConversationId(null);
+              // Force reload by incrementing retryKey, which triggers the useEffect
+              setRetryKey(prev => prev + 1);
             }}
             onBack={handleNavigation}
           />

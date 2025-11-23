@@ -151,3 +151,46 @@ export const ShopIcon: React.FC<IconProps> = ({ color, size = 24, active = false
     </G>
   </Svg>
 );
+
+export const PhoneIcon: React.FC<IconProps> = ({ color, size = 24, active = false }) => {
+  const fillColor = active ? '#FFFFFF' : color;
+  // For inactive state, use a gray color; for active, use white
+  const detailColor = active ? '#0F1115' : '#AAAAAB';
+  const height = Math.round((size * 32) / 17);
+  
+  return (
+    <Svg width={size} height={height} viewBox="0 0 17 32" fill="none">
+      <Defs>
+        <Filter id="phoneDropShadow" x="-50%" y="-50%" width="200%" height="200%">
+          <FeFlood floodOpacity="0" />
+          <FeColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
+          <FeOffset dy="2" />
+          <FeGaussianBlur stdDeviation={active ? 0.8 : 0.5} />
+          <FeComposite in2="SourceAlpha" operator="out" />
+          <FeColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
+          <FeBlend mode="plus-darker" in2="BackgroundImageFix" />
+          <FeBlend mode="normal" in="SourceGraphic" />
+        </Filter>
+      </Defs>
+      <G filter="url(#phoneDropShadow)">
+        {/* Phone body */}
+        <Path d="M0 3C0 1.34315 1.34315 0 3 0H14C15.6569 0 17 1.34315 17 3V29C17 30.6569 15.6569 32 14 32H3C1.34315 32 0 30.6569 0 29V3Z" fill={fillColor} />
+        {/* Top speaker dots */}
+        <Circle cx="2.5" cy="3.5" r="1.5" fill={detailColor} />
+        <Circle cx="6.5" cy="3.5" r="1.5" fill={detailColor} />
+        <Circle cx="10.5" cy="3.5" r="1.5" fill={detailColor} />
+        <Circle cx="14.5" cy="3.5" r="1.5" fill={detailColor} />
+        {/* Screen separator line */}
+        <Path d="M1 6.5C1 6.22386 1.22386 6 1.5 6H15.5C15.7761 6 16 6.22386 16 6.5C16 6.77614 15.7761 7 15.5 7H1.5C1.22386 7 1 6.77614 1 6.5Z" fill={detailColor} />
+        {/* Screen area */}
+        <Path d="M1 9C1 8.44772 1.44772 8 2 8H15C15.5523 8 16 8.44772 16 9V17C16 17.5523 15.5523 18 15 18H2C1.44772 18 1 17.5523 1 17V9Z" fill={detailColor} />
+        {/* Home indicator line 1 */}
+        <Path d="M1 20C1 19.4477 1.44772 19 2 19H15C15.5523 19 16 19.4477 16 20V21C16 21.5523 15.5523 22 15 22H2C1.44772 22 1 21.5523 1 21V20Z" fill={detailColor} />
+        {/* Home indicator line 2 */}
+        <Path d="M1 24C1 23.4477 1.44772 23 2 23H15C15.5523 23 16 23.4477 16 24V27C16 27.5523 15.5523 28 15 28H2C1.44772 28 1 27.5523 1 27V24Z" fill={detailColor} />
+        {/* Bottom home button area */}
+        <Path d="M6 31.5C6 31.2239 6.22386 31 6.5 31H10.5C10.7761 31 11 31.2239 11 31.5C11 31.7761 10.7761 32 10.5 32H6.5C6.22386 32 6 31.7761 6 31.5Z" fill={detailColor} />
+      </G>
+    </Svg>
+  );
+};
