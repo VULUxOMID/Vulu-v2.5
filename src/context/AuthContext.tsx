@@ -442,6 +442,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     initializeSession();
 
+    // 🔍 DEBUG: Check if Firebase auth tokens exist in AsyncStorage on startup
+    safeAsync(async () => {
+      try {
+        const keys = await AsyncStorage.getAllKeys();
+        const firebaseAuthKeys = keys.filter(key => key.startsWith('firebase:auth'));
+        if (firebaseAuthKeys.length > 0) {
+          console.log(`🔍 [DEBUG] Found ${firebaseAuthKeys.length} Firebase auth key(s) in AsyncStorage:`, firebaseAuthKeys);
+        } else {
+          console.log('⚠️ [DEBUG] No Firebase auth keys found in AsyncStorage - user will need to sign in');
+        }
+      } catch (error) {
+        console.warn('⚠️ [DEBUG] Failed to check AsyncStorage for Firebase auth keys:', error);
+      }
+    }, undefined, 'debug.checkFirebaseAuthKeys');
+
     // ❌ REMOVED: checkFirebaseSession() was setting authReady too early
     // This caused a race condition where authReady = true before onAuthStateChanged fired
     // Now onAuthStateChanged is the SINGLE source of truth for authReady
@@ -467,6 +482,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Log auth state changes for debugging persistence
       console.log('🔐 Auth state changed:', firebaseUser ? `signed-in (${firebaseUser.uid})` : 'signed-out');
+      
+      // 🔍 DEBUG: Log more details when user is null
+      if (!firebaseUser) {
+        console.log('⚠️ [DEBUG] onAuthStateChanged fired with null user - checking AsyncStorage...');
+        try {
+          const keys = await AsyncStorage.getAllKeys();
+          const firebaseAuthKeys = keys.filter(key => key.startsWith('firebase:auth'));
+          console.log(`🔍 [DEBUG] Firebase auth keys in AsyncStorage: ${firebaseAuthKeys.length}`, firebaseAuthKeys);
+          if (firebaseAuthKeys.length > 0) {
+            console.warn('⚠️ [DEBUG] Firebase auth keys exist but user is null - tokens may be invalid or expired');
+          }
+        } catch (error) {
+          console.warn('⚠️ [DEBUG] Failed to check AsyncStorage:', error);
+        }
+      }
 
       if (firebaseUser) {
         // Regular Firebase user - use safe setters
@@ -713,6 +743,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Note: Firebase persistence automatically saves the session to AsyncStorage
       // The session will be restored on next app launch via onAuthStateChanged
       console.log('✅ Sign-in successful - Firebase will persist this session');
+      
+      // 🔍 DEBUG: Verify Firebase auth tokens were saved
+      safeAsync(async () => {
+        try {
+          const keys = await AsyncStorage.getAllKeys();
+          const firebaseAuthKeys = keys.filter(key => key.startsWith('firebase:auth'));
+          console.log(`🔍 [DEBUG] After sign-in: Found ${firebaseAuthKeys.length} Firebase auth key(s) in AsyncStorage:`, firebaseAuthKeys);
+        } catch (error) {
+          console.warn('⚠️ [DEBUG] Failed to verify Firebase auth keys after sign-in:', error);
+        }
+      }, undefined, 'debug.verifyAuthKeysAfterSignIn');
     } catch (error: any) {
       // Log failed login attempt
       await securityService.logSecurityEvent({
