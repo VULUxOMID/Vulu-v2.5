@@ -15,14 +15,14 @@ export const ChatIcon: React.FC<IconProps> = ({ color, size = 24, active = false
     <Svg width={width} height={height} viewBox="0 0 24 23" fill="none">
       <Defs>
         <Filter id="chatDropShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <FeFlood floodOpacity="0" />
+          <FeFlood floodOpacity="0" result="BackgroundImageFix" />
           <FeColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
           <FeOffset dy="2" />
           <FeGaussianBlur stdDeviation={active ? 0.8 : 0.5} />
           <FeComposite in2="SourceAlpha" operator="out" />
           <FeColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
-          <FeBlend mode="plus-darker" in2="BackgroundImageFix" />
-          <FeBlend mode="normal" in="SourceGraphic" />
+          <FeBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
+          <FeBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
         </Filter>
       </Defs>
       <G filter="url(#chatDropShadow)">
@@ -48,14 +48,14 @@ export const MusicIcon: React.FC<IconProps> = ({ color, size = 24, active = fals
   <Svg width={size} height={size} viewBox="0 0 22 22" fill="none">
     <Defs>
       <Filter id="musicDropShadow" x="-50%" y="-50%" width="200%" height="200%">
-        <FeFlood floodOpacity="0" />
+        <FeFlood floodOpacity="0" result="BackgroundImageFix" />
         <FeColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
         <FeOffset dy="2" />
         <FeGaussianBlur stdDeviation="0.5" />
         <FeComposite in2="SourceAlpha" operator="out" />
         <FeColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
-        <FeBlend mode="plus-darker" in2="BackgroundImageFix" />
-        <FeBlend mode="normal" in="SourceGraphic" />
+        <FeBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
+        <FeBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
       </Filter>
     </Defs>
     <G filter="url(#musicDropShadow)">
@@ -82,14 +82,14 @@ export const SlotsIcon: React.FC<IconProps> = ({ color, size = 24, active = fals
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Defs>
         <Filter id="slotsDropShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <FeFlood floodOpacity="0" />
+          <FeFlood floodOpacity="0" result="BackgroundImageFix" />
           <FeColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
           <FeOffset dy="2" />
           <FeGaussianBlur stdDeviation="0.5" />
           <FeComposite in2="SourceAlpha" operator="out" />
           <FeColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
-          <FeBlend mode="plus-darker" in2="BackgroundImageFix" />
-          <FeBlend mode="normal" in="SourceGraphic" />
+          <FeBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
+          <FeBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
         </Filter>
       </Defs>
       <G filter="url(#slotsDropShadow)">
@@ -110,14 +110,14 @@ export const LeaderboardIcon: React.FC<IconProps> = ({ color, size = 24, active 
     <Svg width={size} height={height} viewBox="0 0 23 21" fill="none">
       <Defs>
         <Filter id="leaderDropShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <FeFlood floodOpacity="0" />
+          <FeFlood floodOpacity="0" result="BackgroundImageFix" />
           <FeColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
           <FeOffset dy="2" />
           <FeGaussianBlur stdDeviation="0.5" />
           <FeComposite in2="SourceAlpha" operator="out" />
           <FeColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
-          <FeBlend mode="plus-darker" in2="BackgroundImageFix" />
-          <FeBlend mode="normal" in="SourceGraphic" />
+          <FeBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
+          <FeBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
         </Filter>
       </Defs>
       <G filter="url(#leaderDropShadow)">
@@ -135,14 +135,14 @@ export const ShopIcon: React.FC<IconProps> = ({ color, size = 24, active = false
   <Svg width={size} height={Math.round((size * 19) / 20)} viewBox="0 0 20 19" fill="none">
     <Defs>
       <Filter id="shopDropShadow" x="-50%" y="-50%" width="200%" height="200%">
-        <FeFlood floodOpacity="0" />
+        <FeFlood floodOpacity="0" result="BackgroundImageFix" />
         <FeColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
         <FeOffset dy="2" />
         <FeGaussianBlur stdDeviation="0.5" />
         <FeComposite in2="SourceAlpha" operator="out" />
         <FeColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
-        <FeBlend mode="plus-darker" in2="BackgroundImageFix" />
-        <FeBlend mode="normal" in="SourceGraphic" />
+        <FeBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
+        <FeBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
       </Filter>
     </Defs>
     <G filter="url(#shopDropShadow)">
@@ -162,14 +162,14 @@ export const PhoneIcon: React.FC<IconProps> = ({ color, size = 24, active = fals
     <Svg width={size} height={height} viewBox="0 0 17 32" fill="none">
       <Defs>
         <Filter id="phoneDropShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <FeFlood floodOpacity="0" />
+          <FeFlood floodOpacity="0" result="BackgroundImageFix" />
           <FeColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
           <FeOffset dy="2" />
           <FeGaussianBlur stdDeviation={active ? 0.8 : 0.5} />
           <FeComposite in2="SourceAlpha" operator="out" />
           <FeColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
-          <FeBlend mode="plus-darker" in2="BackgroundImageFix" />
-          <FeBlend mode="normal" in="SourceGraphic" />
+          <FeBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
+          <FeBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
         </Filter>
       </Defs>
       <G filter="url(#phoneDropShadow)">
