@@ -93,14 +93,6 @@ const AuthSelectionScreen: React.FC<AuthSelectionScreenProps> = ({
             <Text style={styles.brandName}>VULU</Text>
           </View>
 
-          {/* Title and Description */}
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>Choose Your Path</Text>
-            <Text style={styles.subtitle}>
-              How would you like to continue with VULU?
-            </Text>
-          </View>
-
           {/* Quick Sign-In Tiles */}
           <QuickSignInTiles onProfileSelect={handleQuickSignIn} />
 
@@ -233,23 +225,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: AuthColors.primaryText,
     letterSpacing: -0.5,
-  },
-  titleContainer: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: AuthColors.primaryText,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: AuthColors.secondaryText,
-    textAlign: 'center',
-    lineHeight: 22,
   },
   actionsContainer: {
     marginBottom: 32,
