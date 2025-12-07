@@ -180,6 +180,27 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToSignup, onSwitchToP
     }
   };
 
+  // TEMPORARY: Quick login button for testing
+  const handleQuickLogin = async () => {
+    const testEmail = 'Amin99@live.no';
+    const testPassword = 'Maxi123rio';
+    
+    setEmail(testEmail);
+    setPassword(testPassword);
+    
+    setLoading(AuthLoadingMessages.SIGNING_IN.message, AuthLoadingMessages.SIGNING_IN.submessage);
+
+    try {
+      await signIn(testEmail, testPassword);
+      console.log('✅ Quick login successful');
+      setSuccess(AuthLoadingMessages.SUCCESS_SIGNED_IN.message, AuthLoadingMessages.SUCCESS_SIGNED_IN.submessage);
+    } catch (error: any) {
+      console.error('❌ Quick login failed:', error.message);
+      const errorInfo = FirebaseErrorHandler.formatAuthErrorForUI(error);
+      setError('Quick Login Failed', errorInfo.message);
+    }
+  };
+
   return (
     <View style={styles.discordContainer}>
       <SafeAreaView style={styles.safeArea}>
@@ -206,6 +227,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToSignup, onSwitchToP
               <View style={styles.discordTitle}>
                 <Text style={styles.discordTitleText}>Welcome back!</Text>
               </View>
+
+              {/* TEMPORARY: Quick Login Button */}
+              <AuthButton
+                title="⚡ Quick Login (Temp)"
+                onPress={handleQuickLogin}
+                loading={loadingState.isLoading && loadingState.type === 'loading'}
+                disabled={loadingState.isLoading}
+                containerStyle={styles.tempQuickLoginButton}
+                textStyle={styles.tempQuickLoginButtonText}
+              />
 
               {/* Quick Sign-In Tiles */}
               <QuickSignInTiles onProfileSelect={handleQuickSignIn} />
@@ -451,6 +482,27 @@ const styles = StyleSheet.create({
     marginTop: 16, // 16px below CTA
     marginBottom: 16,
     alignSelf: 'center',
+  },
+
+  // TEMPORARY: Quick login button styling
+  tempQuickLoginButton: {
+    marginTop: 0,
+    marginBottom: 16,
+    paddingVertical: 12,
+    alignSelf: 'center',
+    width: '100%',
+    borderRadius: 8,
+    backgroundColor: '#10B981', // Green color to stand out
+    minHeight: 44,
+    borderWidth: 2,
+    borderColor: '#059669',
+  },
+
+  tempQuickLoginButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 });
 

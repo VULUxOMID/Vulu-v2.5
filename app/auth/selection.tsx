@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
 import AuthSelectionScreen from '../../src/screens/auth/AuthSelectionScreen';
@@ -29,8 +29,21 @@ export default function AuthSelectionRoute() {
       await signInAsGuest();
       console.log('✅ Guest login successful, navigating to main app');
       router.replace('/(main)');
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Guest login failed:', error);
+      // Log full error details for debugging
+      if (error?.message) {
+        console.error('Error message:', error.message);
+      }
+      if (error?.stack) {
+        console.error('Error stack:', error.stack);
+      }
+      // Show user-friendly error message
+      Alert.alert(
+        'Guest Mode Error',
+        error?.message || 'Unable to continue as guest. Please try again.',
+        [{ text: 'OK' }]
+      );
     }
   };
 

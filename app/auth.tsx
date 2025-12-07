@@ -26,22 +26,44 @@ export default function Auth() {
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
-  // Check onboarding completion status
+  // Check onboarding completion status (optimized for speed)
   useEffect(() => {
+    let mounted = true;
+    
     const checkOnboardingStatus = async () => {
       try {
+        // Use getItem with fast path - don't wait if user already exists
+        if (user && user.email) {
+          // Existing logged-in user - skip AsyncStorage check and assume completed
+          if (mounted) {
+            setOnboardingCompleted(true);
+            setCheckingOnboarding(false);
+          }
+          return;
+        }
+        
         const completed = await AsyncStorage.getItem('@onboarding_completed');
-        setOnboardingCompleted(completed === 'true');
+        if (mounted) {
+          setOnboardingCompleted(completed === 'true');
+        }
       } catch (error) {
         console.warn('[auth.tsx] AsyncStorage error, defaulting to incomplete onboarding');
-        setOnboardingCompleted(false);
+        if (mounted) {
+          setOnboardingCompleted(false);
+        }
       } finally {
-        setCheckingOnboarding(false);
+        if (mounted) {
+          setCheckingOnboarding(false);
+        }
       }
     };
 
     checkOnboardingStatus();
-  }, []);
+    
+    return () => {
+      mounted = false;
+    };
+  }, [user]);
 
   // Navigate to main app when user signs in on this screen
   // This is necessary because app/index.tsx is unmounted when we're on /auth
@@ -54,9 +76,11 @@ export default function Auth() {
     // 3. AsyncStorage flag says onboarding is complete
     // 4. Firestore profile says onboarding is complete
     // 5. Profile has username and displayName (legacy accounts without onboardingCompleted flag)
+    // 6. User has an email (existing logged-in user, not new registration)
     const hasCompletedOnboarding = onboardingCompleted || userProfile?.onboardingCompleted;
     const hasCompleteProfile = userProfile?.username && userProfile?.displayName;
-    const shouldSkipOnboarding = isGuest || justRegistered || hasCompletedOnboarding || hasCompleteProfile;
+    const isExistingUser = user.email && !justRegistered; // Has email and didn't just register
+    const shouldSkipOnboarding = isGuest || justRegistered || hasCompletedOnboarding || hasCompleteProfile || isExistingUser;
 
     if (shouldSkipOnboarding) {
       console.log('✅ [auth.tsx] User signed in, navigating to main app', {
@@ -64,15 +88,21 @@ export default function Auth() {
         justRegistered,
         onboardingCompleted,
         firestoreOnboardingCompleted: userProfile?.onboardingCompleted,
-        hasCompleteProfile
+        hasCompleteProfile,
+        isExistingUser,
+        userEmail: user.email
       });
+      // Use replace to prevent going back to auth screen
       router.replace('/(main)');
+      return;
     } else {
       console.log('⏳ [auth.tsx] User needs onboarding', {
         onboardingCompleted,
         firestoreOnboardingCompleted: userProfile?.onboardingCompleted,
         hasUsername: !!userProfile?.username,
-        hasDisplayName: !!userProfile?.displayName
+        hasDisplayName: !!userProfile?.displayName,
+        userEmail: user.email,
+        justRegistered
       });
     }
   }, [user, checkingOnboarding, onboardingCompleted, userProfile?.onboardingCompleted, userProfile?.username, userProfile?.displayName, isGuest, justRegistered, router]);
@@ -86,9 +116,11 @@ export default function Auth() {
   // 5. Profile does NOT have username and displayName (incomplete profile)
   // 6. Not a guest user
   // 7. Not just registered
+  // 8. User doesn't have email (new user, not existing logged-in user)
   const hasCompletedOnboarding = onboardingCompleted || userProfile?.onboardingCompleted;
   const hasCompleteProfile = userProfile?.username && userProfile?.displayName;
-  const shouldShowOnboarding = user && !checkingOnboarding && !hasCompletedOnboarding && !hasCompleteProfile && !isGuest && !justRegistered;
+  const isExistingUser = user?.email && !justRegistered;
+  const shouldShowOnboarding = user && !checkingOnboarding && !hasCompletedOnboarding && !hasCompleteProfile && !isGuest && !justRegistered && !isExistingUser;
 
   if (shouldShowOnboarding) {
     return (

@@ -36,7 +36,7 @@ export interface GuestUser {
   uid: string;
   email: string | null;
   displayName: string;
-  photoURL: string;
+  photoURL: string | null;
   isGuest: true;
   guestId: string;
 }
@@ -82,7 +82,7 @@ class AuthService {
       typeof data === 'object' &&
       typeof data.uid === 'string' &&
       typeof data.displayName === 'string' &&
-      typeof data.photoURL === 'string' &&
+      (typeof data.photoURL === 'string' || data.photoURL === null) &&
       data.isGuest === true &&
       typeof data.guestId === 'string' &&
       data.uid.startsWith('guest_')

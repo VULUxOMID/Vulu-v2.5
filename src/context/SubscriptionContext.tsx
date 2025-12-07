@@ -52,8 +52,6 @@ interface SubscriptionProviderProps {
 }
 
 export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ children }) => {
-  console.log('🔄 SubscriptionProvider component initializing');
-
   const { user, isGuest, userProfile } = useAuthSafe();
   
   // State
@@ -94,15 +92,7 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
 
   // Set up real-time subscription listener
   useEffect(() => {
-    console.log('🔄 SubscriptionContext useEffect triggered', {
-      hasUser: !!user,
-      isGuest,
-      hasUserProfile: !!userProfile,
-      userProfileFields: userProfile ? Object.keys(userProfile) : []
-    });
-
     if (!user || isGuest) {
-      console.log('🚫 No user or guest user, skipping subscription setup');
       setSubscription(null);
       setIsLoading(false);
       return;
@@ -111,21 +101,11 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
     // Migrate user subscription fields if needed
     const initializeSubscription = async () => {
       try {
-        console.log('🔄 Checking subscription fields for user:', user.uid);
-        console.log('📊 User profile data:', userProfile);
 
         // Check if user profile has subscription fields, migrate if needed
         if (userProfile && (!userProfile.subscriptionPlan || !userProfile.subscriptionStatus)) {
-          console.log('🔄 Migrating user subscription fields...');
           // await migrateUserSubscriptionFields(user.uid);
-          console.log('⚠️ Migration temporarily disabled for debugging');
-        } else if (!userProfile) {
-          console.log('⚠️ User profile not available yet, skipping migration');
-        } else {
-          console.log('✅ User already has subscription fields:', {
-            subscriptionPlan: userProfile.subscriptionPlan,
-            subscriptionStatus: userProfile.subscriptionStatus
-          });
+          // Migration temporarily disabled
         }
       } catch (error) {
         console.warn('⚠️ Failed to migrate subscription fields:', error);
@@ -134,7 +114,6 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
 
     initializeSubscription();
 
-    console.log('🔄 Setting up subscription listener for user:', user.uid);
     const unsubscribe = subscriptionService.onSubscriptionChange(user.uid, (newSubscription) => {
       console.log('📦 Subscription update received:', newSubscription);
       setSubscription(newSubscription);

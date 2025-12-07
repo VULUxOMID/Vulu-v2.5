@@ -442,13 +442,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     initializeSession();
 
-    // Check for Firebase persisted session
-    // Firebase automatically restores sessions, we just wait for it
-    safeAsync(async () => {
-      await checkFirebaseSession();
-      // Set authReady after session check completes
-      safeSetAuthReady(true);
-    }, undefined, 'checkFirebaseSession.onStartup');
+    // ❌ REMOVED: checkFirebaseSession() was setting authReady too early
+    // This caused a race condition where authReady = true before onAuthStateChanged fired
+    // Now onAuthStateChanged is the SINGLE source of truth for authReady
+    // Firebase automatically restores sessions via AsyncStorage persistence
+    // We just wait for onAuthStateChanged to fire - no manual checks needed
 
     // Set a maximum loading time to prevent infinite loading states
     const loadingTimeout = safeTimer.current.setTimeout(() => {
