@@ -442,20 +442,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     initializeSession();
 
-    // 🔍 DEBUG: Check if Firebase auth tokens exist in AsyncStorage on startup
-    safeAsync(async () => {
-      try {
-        const keys = await AsyncStorage.getAllKeys();
-        const firebaseAuthKeys = keys.filter(key => key.startsWith('firebase:auth'));
-        if (firebaseAuthKeys.length > 0) {
-          console.log(`🔍 [DEBUG] Found ${firebaseAuthKeys.length} Firebase auth key(s) in AsyncStorage:`, firebaseAuthKeys);
-        } else {
-          console.log('⚠️ [DEBUG] No Firebase auth keys found in AsyncStorage - user will need to sign in');
+    // Check if Firebase auth tokens exist in AsyncStorage on startup (dev only)
+    if (__DEV__) {
+      safeAsync(async () => {
+        try {
+          const keys = await AsyncStorage.getAllKeys();
+          const firebaseAuthKeys = keys.filter(key => key.startsWith('firebase:auth'));
+          if (firebaseAuthKeys.length > 0) {
+            console.log(`[Auth] Found ${firebaseAuthKeys.length} Firebase auth key(s) in AsyncStorage`);
+          } else {
+            console.log('[Auth] No Firebase auth keys found in AsyncStorage');
+          }
+        } catch (error) {
+          console.warn('[Auth] Failed to check AsyncStorage for Firebase auth keys:', error);
         }
-      } catch (error) {
-        console.warn('⚠️ [DEBUG] Failed to check AsyncStorage for Firebase auth keys:', error);
-      }
-    }, undefined, 'debug.checkFirebaseAuthKeys');
+      }, undefined, 'debug.checkFirebaseAuthKeys');
+    }
 
     // ❌ REMOVED: checkFirebaseSession() was setting authReady too early
     // This caused a race condition where authReady = true before onAuthStateChanged fired
@@ -464,10 +466,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // We just wait for onAuthStateChanged to fire - no manual checks needed
 
     // Set a maximum loading time to prevent infinite loading states
-    const loadingTimeout = safeTimer.current.setTimeout(() => {
-      if (mounted.current && loading) {
-        console.warn('⚠️ Authentication loading timeout, setting loading to false');
+    const loadingTimeout = safeTimer.current.setTimeout(async () => {
+      if (!mounted.current) return;
+      
+      // If onAuthStateChanged hasn't fired yet, we need to manually check and set authReady
+      if (!authStateReceived.current) {
+        console.warn('⚠️ Authentication loading timeout - onAuthStateChanged has not fired yet');
+        console.warn('⚠️ Manually checking auth state as fallback...');
+        
+        try {
+          // Manually check current auth state
+          const currentUser = authService.getCurrentUser();
+          if (currentUser) {
+            console.log('✅ [Timeout Fallback] Found user:', currentUser.uid);
+            safeSetUser(currentUser);
+            safeSetIsGuest(false);
+          } else {
+            console.log('ℹ️ [Timeout Fallback] No user found');
+            safeSetUser(null);
+            safeSetUserProfile(null);
+            safeSetIsGuest(false);
+          }
+        } catch (error) {
+          console.error('❌ [Timeout Fallback] Error checking auth state:', error);
+          // On error, assume no user
+          safeSetUser(null);
+          safeSetUserProfile(null);
+          safeSetIsGuest(false);
+        }
+      }
+      
+      // Always set loading to false and authReady to true after timeout
+      // This ensures navigation can proceed even if onAuthStateChanged is delayed
+      if (mounted.current) {
         safeSetLoading(false);
+        safeSetAuthReady(true);
+        console.log('✅ [Timeout Fallback] Set authReady = true to allow navigation');
       }
     }, 10000); // 10 second timeout
 
@@ -480,21 +514,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Clear timeout since we got a response
       safeTimer.current.clearTimeout(loadingTimeout);
 
-      // Log auth state changes for debugging persistence
+      // Log auth state changes
       console.log('🔐 Auth state changed:', firebaseUser ? `signed-in (${firebaseUser.uid})` : 'signed-out');
       
-      // 🔍 DEBUG: Log more details when user is null
-      if (!firebaseUser) {
-        console.log('⚠️ [DEBUG] onAuthStateChanged fired with null user - checking AsyncStorage...');
+      // Log additional details when user is null (dev only)
+      if (!firebaseUser && __DEV__) {
         try {
           const keys = await AsyncStorage.getAllKeys();
           const firebaseAuthKeys = keys.filter(key => key.startsWith('firebase:auth'));
-          console.log(`🔍 [DEBUG] Firebase auth keys in AsyncStorage: ${firebaseAuthKeys.length}`, firebaseAuthKeys);
           if (firebaseAuthKeys.length > 0) {
-            console.warn('⚠️ [DEBUG] Firebase auth keys exist but user is null - tokens may be invalid or expired');
+            console.warn('[Auth] Firebase auth keys exist but user is null - tokens may be invalid or expired');
           }
         } catch (error) {
-          console.warn('⚠️ [DEBUG] Failed to check AsyncStorage:', error);
+          // Silent fail in production
         }
       }
 
@@ -744,16 +776,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // The session will be restored on next app launch via onAuthStateChanged
       console.log('✅ Sign-in successful - Firebase will persist this session');
       
-      // 🔍 DEBUG: Verify Firebase auth tokens were saved
-      safeAsync(async () => {
-        try {
-          const keys = await AsyncStorage.getAllKeys();
-          const firebaseAuthKeys = keys.filter(key => key.startsWith('firebase:auth'));
-          console.log(`🔍 [DEBUG] After sign-in: Found ${firebaseAuthKeys.length} Firebase auth key(s) in AsyncStorage:`, firebaseAuthKeys);
-        } catch (error) {
-          console.warn('⚠️ [DEBUG] Failed to verify Firebase auth keys after sign-in:', error);
-        }
-      }, undefined, 'debug.verifyAuthKeysAfterSignIn');
+      // Verify Firebase auth tokens were saved (dev only)
+      if (__DEV__) {
+        safeAsync(async () => {
+          try {
+            const keys = await AsyncStorage.getAllKeys();
+            const firebaseAuthKeys = keys.filter(key => key.startsWith('firebase:auth'));
+            console.log(`[Auth] After sign-in: Found ${firebaseAuthKeys.length} Firebase auth key(s) in AsyncStorage`);
+          } catch (error) {
+            // Silent fail in production
+          }
+        }, undefined, 'debug.verifyAuthKeysAfterSignIn');
+      }
     } catch (error: any) {
       // Log failed login attempt
       await securityService.logSecurityEvent({

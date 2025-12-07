@@ -28,9 +28,6 @@ function AuthenticationRouter() {
   useEffect(() => {
     if (!authContext || hasNavigated) return;
 
-    // 🔍 DEBUG: Log current state
-    console.log(`🔍 [index.tsx] Navigation check - user: ${user ? user.uid : 'null'}, authReady: ${authReady}, hasNavigated: ${hasNavigated}`);
-
     // If user exists (Firebase restored session OR manual login), navigate to main app
     if (user) {
       console.log('✅ [index.tsx] User authenticated, navigating to main app');
