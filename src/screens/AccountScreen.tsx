@@ -22,7 +22,6 @@ import ScrollableContentContainer from '../components/ScrollableContentContainer
 import { authService } from '../services/authService';
 import { useAuth } from '../context/AuthContext';
 import { firestoreService } from '../services/firestoreService';
-import { BiometricSettings } from '../components/auth/BiometricAuthButton';
 import SecurityMonitor from '../components/security/SecurityMonitor';
 import SecuritySettings from '../components/security/SecuritySettings';
 import DiscordThemeToggle from '../components/DiscordThemeToggle';
@@ -537,10 +536,6 @@ const AccountScreen = () => {
               <Feather name="chevron-right" size={20} color="#9BA1A6" />
             </View>
           </TouchableOpacity>
-
-          <View style={styles.divider} />
-
-          <BiometricSettings />
         </LinearGradient>
       </View>
     );

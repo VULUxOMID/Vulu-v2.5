@@ -16,7 +16,6 @@ import FirebaseErrorHandler from '../../utils/firebaseErrorHandler';
 import { useAuthLoading, AuthLoadingMessages } from '../../hooks/useAuthLoading';
 import { validateEmail, loginRateLimiter } from '../../utils/inputSanitization';
 import SocialAuthButtons from './SocialAuthButtons';
-import BiometricAuthButton from './BiometricAuthButton';
 import QuickSignInTiles from './QuickSignInTiles';
 import { SavedProfile } from '../../services/savedProfilesService';
 
@@ -296,18 +295,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToSignup, onSwitchToP
                     textStyle={styles.discordButtonText}
                   />
 
-                  <BiometricAuthButton
-                    disabled={loadingState.isLoading}
-                    onSuccess={() => {
-                      setTimeout(() => {
-                        router.replace('/(main)');
-                      }, 1500);
-                    }}
-                    style={styles.discordBiometricButton}
-                  />
-
-
-
                   <View style={styles.discordSocialContainer}>
                     <SocialAuthButtons
                       disabled={loadingState.isLoading}
@@ -442,13 +429,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF', // White text
     textAlign: 'center',
-  },
-
-  // Discord-style biometric button
-  discordBiometricButton: {
-    marginVertical: 12,
-    alignSelf: 'center',
-    width: '100%',
   },
 
   // Discord-style social auth container

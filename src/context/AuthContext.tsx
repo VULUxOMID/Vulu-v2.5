@@ -12,7 +12,6 @@ try {
 } catch (error) {
   console.warn('Social auth service not available');
 }
-import { biometricAuthService } from '../services/biometricAuthService';
 import { securityService } from '../services/securityService';
 import { profileSyncService } from '../services/profileSyncService';
 import { encryptionService } from '../services/encryptionService';
@@ -53,11 +52,6 @@ interface AuthContextType {
   // Onboarding methods
   completeOnboarding: (onboardingData: any) => Promise<void>;
   isOnboardingComplete: () => Promise<boolean>;
-  enableBiometricAuth: () => Promise<boolean>;
-  disableBiometricAuth: () => Promise<void>;
-  signInWithBiometrics: () => Promise<boolean>;
-  isBiometricAuthAvailable: () => Promise<boolean>;
-  getBiometricTypeDescription: () => Promise<string>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -1013,7 +1007,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         'userProfile',
         'authToken',
         'lastLoginMethod',
-        'biometricEnabled',
         'rememberMe',
         '@onboarding_completed' // Clear onboarding flag on sign-out
       ]);
@@ -1025,9 +1018,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (socialAuthService) {
         await socialAuthService.signOut();
       }
-
-      // Clear biometric data if user is signing out
-      await biometricAuthService.clearBiometricData();
 
       // Then clear the actual session
       await authService.signOut();
@@ -1082,7 +1072,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         'userProfile',
         'authToken',
         'lastLoginMethod',
-        'biometricEnabled',
         'rememberMe'
       ]);
 
@@ -1247,69 +1236,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return socialAuthService.getAvailableMethods();
   };
 
-  const enableBiometricAuth = async (): Promise<boolean> => {
-    try {
-      if (!user || isGuest) {
-        throw new Error('Please sign in to enable biometric authentication');
-      }
-
-      const email = userProfile?.email || user.email;
-      if (!email) {
-        throw new Error('No email address found for user');
-      }
-
-      // Check if biometric enrollment exists on device
-      const capabilities = await biometricAuthService.getCapabilities();
-      if (!capabilities.isAvailable || !capabilities.isEnrolled) {
-        throw new Error('No biometric enrollment found on this device');
-      }
-
-      return await biometricAuthService.enableBiometricAuth(email, user.uid);
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const disableBiometricAuth = async (): Promise<void> => {
-    try {
-      await biometricAuthService.disableBiometricAuth();
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const signInWithBiometrics = async (): Promise<boolean> => {
-    try {
-      const result = await biometricAuthService.authenticateWithBiometrics();
-
-      if (result.success && result.userEmail && result.userId) {
-        // TODO: Implement secure credential retrieval and sign-in
-        // This requires storing encrypted credentials or implementing a secure token system
-        throw new Error('Biometric sign-in not fully implemented - secure credential storage required');
-      }
-
-      return false;
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const isBiometricAuthAvailable = async (): Promise<boolean> => {
-    try {
-      return await biometricAuthService.shouldOfferBiometricAuth();
-    } catch (error) {
-      return false;
-    }
-  };
-
-  const getBiometricTypeDescription = async (): Promise<string> => {
-    try {
-      return await biometricAuthService.getBiometricTypeDescription();
-    } catch (error) {
-      return 'Biometric Authentication';
-    }
-  };
-
   // Onboarding methods
   const completeOnboarding = async (onboardingData: any) => {
     try {
@@ -1388,11 +1314,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signInWithApple,
     getSocialAuthMethods,
     refreshAdminStatus, // ADDED: Refresh admin status
-    enableBiometricAuth,
-    disableBiometricAuth,
-    signInWithBiometrics,
-    isBiometricAuthAvailable,
-    getBiometricTypeDescription,
     completeOnboarding,
     isOnboardingComplete,
     markRegistrationComplete,
