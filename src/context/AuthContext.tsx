@@ -263,6 +263,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const safeTimer = useRef(new SafeTimer());
   const mounted = useRef(true);
   const authStateReceived = useRef(false); // Track if onAuthStateChange has fired
+  const autoLoginAttempted = useRef(false); // Track if auto-login has been attempted
 
   /**
    * Helper to mark onboarding as completed in AsyncStorage
@@ -420,6 +421,55 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     } catch (error) {
       console.error('Error refreshing admin status:', error);
+    }
+  };
+
+  /**
+   * Attempt auto-login with saved credentials
+   * This is a fallback if Firebase persistence fails
+   */
+  const tryAutoLogin = async (): Promise<void> => {
+    // Prevent multiple attempts
+    if (autoLoginAttempted.current) {
+      return;
+    }
+
+    // Don't attempt if user is already signed in
+    const currentUser = authService.getCurrentUser();
+    if (currentUser) {
+      console.log('✅ User already signed in, skipping auto-login');
+      return;
+    }
+
+    autoLoginAttempted.current = true;
+    console.log('🔐 Attempting auto-login with saved credentials...');
+
+    try {
+      // Load saved credentials from secure storage
+      const credentials = await secureCredentialService.getCredentials();
+
+      if (!credentials) {
+        console.log('ℹ️ No saved credentials found for auto-login');
+        return;
+      }
+
+      console.log('🔑 Found saved credentials, signing in automatically...');
+
+      // Attempt to sign in with saved credentials
+      // This will trigger onAuthStateChanged which will set the user state
+      await authService.signIn(credentials.email, credentials.password);
+
+      console.log('✅ Auto-login successful');
+    } catch (error: any) {
+      console.warn('⚠️ Auto-login failed:', error?.message || error);
+      // Clear invalid credentials
+      try {
+        await secureCredentialService.clearCredentials();
+        console.log('🧹 Cleared invalid credentials');
+      } catch (clearError) {
+        console.warn('⚠️ Failed to clear invalid credentials:', clearError);
+      }
+      // Silent failure - don't block user from manual sign-in
     }
   };
 
@@ -666,14 +716,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         }
       } else {
-        // No Firebase user found - user needs to sign in
-        console.log('🚫 No Firebase user found - authentication required');
+        // No Firebase user found - try auto-login as fallback
+        console.log('🚫 No Firebase user found - attempting auto-login fallback...');
 
         if (mounted.current) {
           safeSetUser(null);
           safeSetUserProfile(null);
           safeSetIsGuest(false);
         }
+
+        // Try auto-login if Firebase persistence failed
+        await safeAsync(async () => {
+          await tryAutoLogin();
+        }, undefined, 'tryAutoLogin.onAuthStateChange');
       }
 
       if (mounted.current) {
@@ -681,6 +736,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         safeSetAuthReady(true);
       }
     });
+
+    // Try auto-login on app startup (after waiting for Firebase to check persistence)
+    safeAsync(async () => {
+      // Wait a bit for Firebase to restore session from persistence
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // If no user after Firebase check, try auto-login
+      const currentUser = authService.getCurrentUser();
+      if (!currentUser && !autoLoginAttempted.current) {
+        await tryAutoLogin();
+      }
+    }, undefined, 'tryAutoLogin.onStartup');
 
     return () => {
       mounted.current = false;
@@ -725,6 +792,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Perform Firebase sign-in (this is the critical path)
       const firebaseUser = await authService.signIn(email, password);
+
+      // Save credentials for auto-login fallback
+      try {
+        await secureCredentialService.saveCredentials(userIdentifier, password);
+        console.log('✅ Credentials saved for auto-login');
+      } catch (credError) {
+        console.warn('⚠️ Failed to save credentials for auto-login:', credError);
+        // Don't fail sign-in if credential save fails
+      }
 
       // Run post-login operations in parallel (don't block user experience)
       Promise.allSettled([
@@ -956,6 +1032,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Then clear the actual session
       await authService.signOut();
 
+      // Reset auto-login attempt flag
+      autoLoginAttempted.current = false;
+
       console.log('✅ SIGN-OUT COMPLETE: All credentials, session tokens, and cached data cleared');
       console.log('🔒 User will need to sign in again on next app launch (auto-login disabled)');
     } catch (error) {
@@ -984,7 +1063,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Clear saved credentials
       try {
         await secureCredentialService.clearCredentials();
-        setHasSavedCredentials(false);
       } catch (credError) {
         console.warn('⚠️ Failed to clear saved credentials:', credError);
       }
@@ -1010,6 +1088,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Sign out from Firebase
       await authService.signOut();
+
+      // Reset auto-login attempt flag
+      autoLoginAttempted.current = false;
 
       // Clear state using safe setters
       safeSetUser(null);
