@@ -88,24 +88,36 @@ class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
 
   override func bundleURL() -> URL? {
 #if DEBUG
-    // Use React Native's built-in bundle URL provider
-    // This automatically handles:
+    // Dev mode: load the JS bundle from the Metro bundler
+    // RCTBundleURLProvider automatically handles:
     // - localhost for iOS Simulator
     // - Auto-detection of Mac IP for physical devices on same network
-    // - Proper Metro bundler URL construction
     let settings = RCTBundleURLProvider.sharedSettings()
-    let bundleURL = settings.jsBundleURL(forBundleRoot: ".expo/.virtual-metro-entry")
-    
-    if let url = bundleURL {
+    if let url = settings.jsBundleURL(forBundleRoot: ".expo/.virtual-metro-entry", fallbackExtension: nil) {
       print("✅ [AppDelegate] Metro bundler URL: \(url.absoluteString)")
       return url
+    }
+    
+    // If RCTBundleURLProvider returns nil, something is wrong:
+    // - Not running in DEBUG mode (check Xcode scheme)
+    // - Metro bundler not started
+    // - Network configuration issue
+    // Returning nil here is safer than providing a non-functional URL
+    print("❌ [AppDelegate] CRITICAL: RCTBundleURLProvider returned nil.")
+    print("   → Check that you're running in DEBUG mode (Product → Scheme → Edit Scheme → Run → Build Configuration = Debug)")
+    print("   → Ensure Metro bundler is running: 'npm start' or 'expo start --dev-client'")
+    print("   → For physical devices: ensure device and Mac are on the same Wi-Fi network")
+    return nil
+#else
+    // Production: load the pre-bundled JS file
+    // If main.jsbundle doesn't exist, this will return nil and cause the error
+    if let url = Bundle.main.url(forResource: "main", withExtension: "jsbundle") {
+      print("✅ [AppDelegate] Using bundled JS: \(url.absoluteString)")
+      return url
     } else {
-      print("⚠️ [AppDelegate] Could not determine Metro bundler URL. Make sure 'expo start' is running.")
+      print("❌ [AppDelegate] RELEASE BUILD ERROR: main.jsbundle not found. You must bundle JS for Release builds.")
       return nil
     }
-#else
-    // Production: Use bundled JavaScript
-    return Bundle.main.url(forResource: "main", withExtension: "jsbundle")
 #endif
   }
 }
