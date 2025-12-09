@@ -228,7 +228,7 @@ exports.cleanupNotificationData = functions.pubsub
 async function getUserNotificationPreferences(userId) {
     try {
         const prefsDoc = await db.doc(`notificationPreferences/${userId}`).get();
-        if (!prefsDoc.exists()) {
+        if (!prefsDoc.exists) {
             // Return default preferences
             return {
                 streamStarts: true,

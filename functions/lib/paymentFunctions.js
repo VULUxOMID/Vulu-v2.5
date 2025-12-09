@@ -11,14 +11,21 @@ const admin = require("firebase-admin");
 const stripe_1 = require("stripe");
 const db = admin.firestore();
 // Initialize Stripe
-const stripe = new stripe_1.default(((_a = functions.config().stripe) === null || _a === void 0 ? void 0 : _a.secret_key) || '', {
-    apiVersion: '2023-10-16'
+const stripeSecret = ((_a = functions.config().stripe) === null || _a === void 0 ? void 0 : _a.secret_key) || '';
+const stripe = new stripe_1.default(stripeSecret, {
+    apiVersion: '2025-10-29.clover'
 });
+function assertStripeConfigured() {
+    if (!stripeSecret) {
+        throw new functions.https.HttpsError('failed-precondition', 'Stripe is not configured. Please set functions.config().stripe.secret_key.');
+    }
+}
 /**
  * Purchase gems with real money
  */
 exports.purchaseGems = functions.https.onCall(async (data, context) => {
     try {
+        assertStripeConfigured();
         // Verify user is authenticated
         if (!context.auth) {
             throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -79,6 +86,7 @@ exports.purchaseGems = functions.https.onCall(async (data, context) => {
 exports.handleStripeWebhook = functions.https.onRequest(async (req, res) => {
     var _a;
     try {
+        assertStripeConfigured();
         const sig = req.headers['stripe-signature'];
         const endpointSecret = (_a = functions.config().stripe) === null || _a === void 0 ? void 0 : _a.webhook_secret;
         if (!sig || !endpointSecret) {

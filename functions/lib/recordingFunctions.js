@@ -18,11 +18,18 @@ const AGORA_APP_CERTIFICATE = (_b = functions.config().agora) === null || _b ===
 const AGORA_CUSTOMER_ID = (_c = functions.config().agora) === null || _c === void 0 ? void 0 : _c.customer_id;
 const AGORA_CUSTOMER_SECRET = (_d = functions.config().agora) === null || _d === void 0 ? void 0 : _d.customer_secret;
 const AGORA_CLOUD_RECORDING_URL = 'https://api.agora.io/v1/apps';
+const isAgoraConfigured = !!(AGORA_APP_ID && AGORA_APP_CERTIFICATE && AGORA_CUSTOMER_ID && AGORA_CUSTOMER_SECRET);
+function assertAgoraConfigured() {
+    if (!isAgoraConfigured) {
+        throw new functions.https.HttpsError('failed-precondition', 'Agora recording is not configured. Please set functions.config().agora.{app_id,app_certificate,customer_id,customer_secret}.');
+    }
+}
 /**
  * Start Agora cloud recording
  */
 exports.startCloudRecording = functions.https.onCall(async (data, context) => {
     try {
+        assertAgoraConfigured();
         // Verify user is authenticated
         if (!context.auth) {
             throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -33,7 +40,7 @@ exports.startCloudRecording = functions.https.onCall(async (data, context) => {
         }
         // Verify user has permission to record this stream
         const streamDoc = await db.doc(`streams/${streamId}`).get();
-        if (!streamDoc.exists()) {
+        if (!streamDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Stream not found');
         }
         const streamData = streamDoc.data();
@@ -74,6 +81,7 @@ exports.startCloudRecording = functions.https.onCall(async (data, context) => {
 exports.stopCloudRecording = functions.https.onCall(async (data, context) => {
     var _a, _b;
     try {
+        assertAgoraConfigured();
         if (!context.auth) {
             throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
         }
@@ -83,7 +91,7 @@ exports.stopCloudRecording = functions.https.onCall(async (data, context) => {
         }
         // Get recording data
         const recordingDoc = await db.doc(`streamRecordings/${recordingId}`).get();
-        if (!recordingDoc.exists()) {
+        if (!recordingDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Recording not found');
         }
         const recordingData = recordingDoc.data();
@@ -121,8 +129,8 @@ exports.stopCloudRecording = functions.https.onCall(async (data, context) => {
 exports.processRecording = functions.firestore
     .document('streamRecordings/{recordingId}')
     .onUpdate(async (change, context) => {
+    const { recordingId } = context.params;
     try {
-        const { recordingId } = context.params;
         const beforeData = change.before.data();
         const afterData = change.after.data();
         // Check if recording just finished
@@ -156,7 +164,7 @@ exports.processRecordingHighlight = functions.https.onCall(async (data, context)
         }
         // Get recording data
         const recordingDoc = await db.doc(`streamRecordings/${recordingId}`).get();
-        if (!recordingDoc.exists()) {
+        if (!recordingDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Recording not found');
         }
         const recordingData = recordingDoc.data();
@@ -192,6 +200,7 @@ exports.processRecordingHighlight = functions.https.onCall(async (data, context)
 exports.cleanupOldRecordings = functions.pubsub
     .schedule('every 24 hours')
     .onRun(async (context) => {
+    var _a;
     try {
         const thirtyDaysAgo = admin.firestore.Timestamp.fromMillis(Date.now() - 30 * 24 * 60 * 60 * 1000);
         // Find old recordings marked for deletion
@@ -202,12 +211,14 @@ exports.cleanupOldRecordings = functions.pubsub
             .get();
         const batch = db.batch();
         let deletedCount = 0;
+        const bucketName = ((_a = functions.config().storage) === null || _a === void 0 ? void 0 : _a.bucket) || process.env.GCLOUD_STORAGE_BUCKET || 'default-bucket';
+        const bucket = storage.bucket(bucketName);
         for (const doc of oldRecordingsQuery.docs) {
             const recordingData = doc.data();
             // Delete video files from storage
             if (recordingData.videoUrl) {
                 try {
-                    await storage.bucket().file(recordingData.videoUrl).delete();
+                    await bucket.file(recordingData.videoUrl).delete();
                 }
                 catch (error) {
                     console.warn(`Failed to delete video file: ${recordingData.videoUrl}`, error);
@@ -215,7 +226,7 @@ exports.cleanupOldRecordings = functions.pubsub
             }
             if (recordingData.thumbnailUrl) {
                 try {
-                    await storage.bucket().file(recordingData.thumbnailUrl).delete();
+                    await bucket.file(recordingData.thumbnailUrl).delete();
                 }
                 catch (error) {
                     console.warn(`Failed to delete thumbnail file: ${recordingData.thumbnailUrl}`, error);

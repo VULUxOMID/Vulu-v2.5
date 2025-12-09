@@ -10,15 +10,26 @@ import Stripe from 'stripe';
 const db = admin.firestore();
 
 // Initialize Stripe
-const stripe = new Stripe(functions.config().stripe?.secret_key || '', {
-  apiVersion: '2023-10-16'
+const stripeSecret = functions.config().stripe?.secret_key || '';
+const stripe = new Stripe(stripeSecret, {
+  apiVersion: '2025-10-29.clover'
 });
+
+function assertStripeConfigured() {
+  if (!stripeSecret) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Stripe is not configured. Please set functions.config().stripe.secret_key.'
+    );
+  }
+}
 
 /**
  * Purchase gems with real money
  */
 export const purchaseGems = functions.https.onCall(async (data, context) => {
   try {
+    assertStripeConfigured();
     // Verify user is authenticated
     if (!context.auth) {
       throw new functions.https.HttpsError(
@@ -110,6 +121,7 @@ export const purchaseGems = functions.https.onCall(async (data, context) => {
  */
 export const handleStripeWebhook = functions.https.onRequest(async (req, res) => {
   try {
+    assertStripeConfigured();
     const sig = req.headers['stripe-signature'] as string;
     const endpointSecret = functions.config().stripe?.webhook_secret;
 

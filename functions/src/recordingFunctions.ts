@@ -17,12 +17,23 @@ const AGORA_APP_CERTIFICATE = functions.config().agora?.app_certificate;
 const AGORA_CUSTOMER_ID = functions.config().agora?.customer_id;
 const AGORA_CUSTOMER_SECRET = functions.config().agora?.customer_secret;
 const AGORA_CLOUD_RECORDING_URL = 'https://api.agora.io/v1/apps';
+const isAgoraConfigured = !!(AGORA_APP_ID && AGORA_APP_CERTIFICATE && AGORA_CUSTOMER_ID && AGORA_CUSTOMER_SECRET);
+
+function assertAgoraConfigured() {
+  if (!isAgoraConfigured) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Agora recording is not configured. Please set functions.config().agora.{app_id,app_certificate,customer_id,customer_secret}.'
+    );
+  }
+}
 
 /**
  * Start Agora cloud recording
  */
 export const startCloudRecording = functions.https.onCall(async (data, context) => {
   try {
+    assertAgoraConfigured();
     // Verify user is authenticated
     if (!context.auth) {
       throw new functions.https.HttpsError(
@@ -42,7 +53,7 @@ export const startCloudRecording = functions.https.onCall(async (data, context) 
 
     // Verify user has permission to record this stream
     const streamDoc = await db.doc(`streams/${streamId}`).get();
-    if (!streamDoc.exists()) {
+    if (!streamDoc.exists) {
       throw new functions.https.HttpsError(
         'not-found',
         'Stream not found'
@@ -105,6 +116,7 @@ export const startCloudRecording = functions.https.onCall(async (data, context) 
  */
 export const stopCloudRecording = functions.https.onCall(async (data, context) => {
   try {
+    assertAgoraConfigured();
     if (!context.auth) {
       throw new functions.https.HttpsError(
         'unauthenticated',
@@ -123,7 +135,7 @@ export const stopCloudRecording = functions.https.onCall(async (data, context) =
 
     // Get recording data
     const recordingDoc = await db.doc(`streamRecordings/${recordingId}`).get();
-    if (!recordingDoc.exists()) {
+    if (!recordingDoc.exists) {
       throw new functions.https.HttpsError(
         'not-found',
         'Recording not found'
@@ -183,8 +195,8 @@ export const stopCloudRecording = functions.https.onCall(async (data, context) =
 export const processRecording = functions.firestore
   .document('streamRecordings/{recordingId}')
   .onUpdate(async (change, context) => {
+    const { recordingId } = context.params;
     try {
-      const { recordingId } = context.params;
       const beforeData = change.before.data();
       const afterData = change.after.data();
 
@@ -231,7 +243,7 @@ export const processRecordingHighlight = functions.https.onCall(async (data, con
 
     // Get recording data
     const recordingDoc = await db.doc(`streamRecordings/${recordingId}`).get();
-    if (!recordingDoc.exists()) {
+    if (!recordingDoc.exists) {
       throw new functions.https.HttpsError(
         'not-found',
         'Recording not found'
@@ -304,6 +316,8 @@ export const cleanupOldRecordings = functions.pubsub
 
       const batch = db.batch();
       let deletedCount = 0;
+      const bucketName = functions.config().storage?.bucket || process.env.GCLOUD_STORAGE_BUCKET || 'default-bucket';
+      const bucket = storage.bucket(bucketName);
 
       for (const doc of oldRecordingsQuery.docs) {
         const recordingData = doc.data();
@@ -311,7 +325,7 @@ export const cleanupOldRecordings = functions.pubsub
         // Delete video files from storage
         if (recordingData.videoUrl) {
           try {
-            await storage.bucket().file(recordingData.videoUrl).delete();
+            await bucket.file(recordingData.videoUrl).delete();
           } catch (error) {
             console.warn(`Failed to delete video file: ${recordingData.videoUrl}`, error);
           }
@@ -319,7 +333,7 @@ export const cleanupOldRecordings = functions.pubsub
 
         if (recordingData.thumbnailUrl) {
           try {
-            await storage.bucket().file(recordingData.thumbnailUrl).delete();
+            await bucket.file(recordingData.thumbnailUrl).delete();
           } catch (error) {
             console.warn(`Failed to delete thumbnail file: ${recordingData.thumbnailUrl}`, error);
           }

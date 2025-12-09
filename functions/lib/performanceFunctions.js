@@ -24,7 +24,7 @@ exports.generateStreamQualityReport = functions.https.onCall(async (data, contex
         }
         // Verify user has access to this stream
         const streamDoc = await db.doc(`streams/${streamId}`).get();
-        if (!streamDoc.exists()) {
+        if (!streamDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Stream not found');
         }
         const streamData = streamDoc.data();
