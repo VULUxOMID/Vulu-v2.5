@@ -1149,13 +1149,15 @@ const HomeScreen = () => {
     setIsPurchasingSpotlight(true);
     setPurchasingOptionIndex(optionIndex);
     
-    // Watchdog timeout: Clear loading state after 15 seconds
-    const watchdogTimeout = setTimeout(() => {
-      console.error(`[WATCHDOG] ⚠️ Cleared stuck loading state: Spotlight purchase (optionIndex: ${optionIndex})`);
-      setIsPurchasingSpotlight(false);
-      setPurchasingOptionIndex(null);
-      Alert.alert('Request Timeout', 'The purchase request took too long. Please try again.');
-    }, 15000);
+    // Watchdog timeout: fail fast instead of hanging forever
+    const watchdogTimeoutMs = 12000;
+    let watchdogTimer: any;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      watchdogTimer = setTimeout(() => {
+        console.warn(`[WATCHDOG] ⚠️ Spotlight purchase timeout (optionIndex: ${optionIndex})`);
+        reject(new Error('Spotlight purchase timed out. Please try again.'));
+      }, watchdogTimeoutMs);
+    });
     
     try {
       console.log(`[SPOTLIGHT] 💰 Calling spendCurrency:`, {
@@ -1171,8 +1173,8 @@ const HomeScreen = () => {
         }
       });
 
-      // Deduct cost using virtual currency service
-      const transaction = await virtualCurrencyService.spendCurrency(
+      // Deduct cost using virtual currency service with timeout race
+      const spendPromise = virtualCurrencyService.spendCurrency(
         user.uid,
         'gold',
         cost,
@@ -1184,6 +1186,8 @@ const HomeScreen = () => {
         }
       );
 
+      const transaction = await Promise.race([spendPromise, timeoutPromise]);
+
       console.log(`[SPOTLIGHT] ✅ spendCurrency successful:`, {
         userId,
         userEmail,
@@ -1192,7 +1196,7 @@ const HomeScreen = () => {
       });
 
       // Clear watchdog timeout on success
-      clearTimeout(watchdogTimeout);
+      clearTimeout(watchdogTimer);
 
       // Set timer and show spotlight
       setYourSpotlightTimeLeft(minutes * 60);
@@ -1215,7 +1219,7 @@ const HomeScreen = () => {
       Alert.alert('Success!', `You've purchased ${minutes} minutes of spotlight time!`);
     } catch (error: any) {
       // Clear watchdog timeout on error
-      clearTimeout(watchdogTimeout);
+      clearTimeout(watchdogTimer);
       
       const isPermissionError = error?.code === 'permission-denied' || error?.message?.includes('Permission denied');
       const logPrefix = isPermissionError ? '🔒' : '❌';
