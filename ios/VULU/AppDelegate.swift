@@ -14,6 +14,9 @@ public class AppDelegate: ExpoAppDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+    // Create React Native delegate - this is where bundleURL() is defined
+    // The bundleURL() method in ReactNativeDelegate is the SINGLE SOURCE OF TRUTH
+    // for determining where to load JavaScript from (Metro in DEBUG, main.jsbundle in RELEASE)
     let delegate = ReactNativeDelegate()
     let factory = ExpoReactNativeFactory(delegate: delegate)
     delegate.dependencyProvider = RCTAppDependencyProvider()
@@ -21,6 +24,13 @@ public class AppDelegate: ExpoAppDelegate {
     reactNativeDelegate = delegate
     reactNativeFactory = factory
     bindReactNativeFactory(factory)
+    
+    // Log which configuration we're using
+#if DEBUG
+    print("📱 [AppDelegate] Starting in DEBUG mode - will use Metro bundler")
+#else
+    print("📱 [AppDelegate] Starting in RELEASE mode - will use embedded main.jsbundle")
+#endif
 
 #if os(iOS) || os(tvOS)
     // UIScene lifecycle support for iOS 13+
@@ -80,42 +90,69 @@ public class AppDelegate: ExpoAppDelegate {
 
 class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
   // Extension point for config-plugins
-
+  
+  // MARK: - Bundle URL Resolution
+  // This is the SINGLE SOURCE OF TRUTH for JS bundle URL in this app.
+  // React Native calls this method to get the URL for loading JavaScript.
+  
   override func sourceURL(for bridge: RCTBridge) -> URL? {
-    // needed to return the correct URL for expo-dev-client.
-    bridge.bundleURL ?? bundleURL()
+    // For expo-dev-client, bridge may already have a bundleURL set
+    // Otherwise, fall back to our bundleURL() implementation
+    return bridge.bundleURL ?? bundleURL()
   }
 
   override func bundleURL() -> URL? {
 #if DEBUG
-    // Dev mode: load the JS bundle from the Metro bundler
+    // DEBUG MODE: Always return a Metro bundler URL (never nil)
     // RCTBundleURLProvider automatically handles:
-    // - localhost for iOS Simulator
-    // - Auto-detection of Mac IP for physical devices on same network
+    // - localhost:8081 for iOS Simulator
+    // - Auto-detection of Mac IP for physical devices on same Wi-Fi network
+    // The jsBundleURL method should return a non-optional URL in normal circumstances.
+    // If it returns nil, that indicates a configuration problem that must be fixed.
     let settings = RCTBundleURLProvider.sharedSettings()
-    if let url = settings.jsBundleURL(forBundleRoot: ".expo/.virtual-metro-entry", fallbackExtension: nil) {
-      print("✅ [AppDelegate] Metro bundler URL: \(url.absoluteString)")
+    let metroURL = settings.jsBundleURL(forBundleRoot: ".expo/.virtual-metro-entry", fallbackExtension: nil)
+    
+    if let url = metroURL {
+      print("✅ [ReactNativeDelegate] Metro bundler URL: \(url.absoluteString)")
       return url
     }
     
-    // If RCTBundleURLProvider returns nil, something is wrong:
-    // - Not running in DEBUG mode (check Xcode scheme)
-    // - Metro bundler not started
-    // - Network configuration issue
-    // Returning nil here is safer than providing a non-functional URL
-    print("❌ [AppDelegate] CRITICAL: RCTBundleURLProvider returned nil.")
-    print("   → Check that you're running in DEBUG mode (Product → Scheme → Edit Scheme → Run → Build Configuration = Debug)")
+    // If RCTBundleURLProvider returns nil, this is a configuration error.
+    // We MUST return a URL to prevent "No script URL provided" error, but this URL
+    // may not work. The user must fix the configuration (DEBUG mode, Metro running, etc.)
+    // Note: This fallback uses localhost which only works on simulator, not physical devices.
+    // If you see this warning, check your Xcode scheme and ensure Metro is running.
+    let fallbackURL = URL(string: "http://localhost:8081/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true")
+    if let url = fallbackURL {
+      print("⚠️ [ReactNativeDelegate] WARNING: RCTBundleURLProvider returned nil!")
+      print("   → Using fallback URL (may not work on physical devices): \(url.absoluteString)")
+      print("   → FIX: Check Xcode scheme: Product → Scheme → Edit Scheme → Run → Build Configuration = Debug")
+      print("   → FIX: Ensure Metro is running: 'npm start' or 'expo start --dev-client'")
+      print("   → FIX: For physical devices, ensure device and Mac are on same Wi-Fi network")
+      return url
+    }
+    
+    // This should never happen (URL(string:) should always succeed for a valid string)
+    // But if it does, we have no choice but to return nil and let React Native show the error
+    print("❌ [ReactNativeDelegate] CRITICAL: Could not construct any Metro URL in DEBUG mode!")
+    print("   → This indicates a serious configuration issue")
+    print("   → Check Xcode scheme: Product → Scheme → Edit Scheme → Run → Build Configuration = Debug")
     print("   → Ensure Metro bundler is running: 'npm start' or 'expo start --dev-client'")
-    print("   → For physical devices: ensure device and Mac are on the same Wi-Fi network")
     return nil
 #else
-    // Production: load the pre-bundled JS file
-    // If main.jsbundle doesn't exist, this will return nil and cause the error
-    if let url = Bundle.main.url(forResource: "main", withExtension: "jsbundle") {
-      print("✅ [AppDelegate] Using bundled JS: \(url.absoluteString)")
-      return url
+    // RELEASE MODE: Load the pre-bundled JS file from the app bundle
+    // This file is created by the "Bundle React Native code and images" build phase
+    // during Release builds. If it doesn't exist, the build phase failed.
+    if let bundledURL = Bundle.main.url(forResource: "main", withExtension: "jsbundle") {
+      print("✅ [ReactNativeDelegate] Using bundled JS: \(bundledURL.absoluteString)")
+      return bundledURL
     } else {
-      print("❌ [AppDelegate] RELEASE BUILD ERROR: main.jsbundle not found. You must bundle JS for Release builds.")
+      // In Release mode, if main.jsbundle doesn't exist, the build phase failed
+      // This should never happen if the build completed successfully
+      print("❌ [ReactNativeDelegate] RELEASE BUILD ERROR: main.jsbundle not found in app bundle!")
+      print("   → The 'Bundle React Native code and images' build phase may have failed")
+      print("   → Check Xcode build logs for bundling errors")
+      print("   → Ensure you're building with Release configuration for Archive/TestFlight")
       return nil
     }
 #endif
