@@ -1,14 +1,17 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users can fully read/write their own document
+
+    // Allow authenticated users full read/write on their own user doc
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Everything else read-only for now
+    // Everything else: everyone can read, no one can write (for now)
     match /{document=**} {
       allow read: if true;
+      allow write: if false;
     }
   }
 }

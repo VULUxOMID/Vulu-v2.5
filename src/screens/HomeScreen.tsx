@@ -2030,7 +2030,17 @@ const HomeScreen = () => {
       await debugTestWrite(userId);
       Alert.alert('Debug Write', 'Debug write succeeded.');
     } catch (error) {
-      Alert.alert('Debug Write', 'Debug write failed. Check logs.');
+      console.error('[DEBUG_WRITE] ❌ Debug write failed at caller:', {
+        userId,
+        message: (error as any)?.message,
+        code: (error as any)?.code,
+        name: (error as any)?.name,
+        stack: (error as any)?.stack,
+      });
+      Alert.alert(
+        'Debug Write',
+        `Debug write failed: ${(error as any)?.message ?? 'See logs'}`
+      );
     }
   };
 
