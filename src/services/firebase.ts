@@ -7,6 +7,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 // Firebase configuration for VULU
+// UNIFIED CONFIG: All platforms (web, iOS Debug, iOS Release, Android) use the same Firebase project "vulugo"
+// - Web/JS: Uses this hardcoded config below
+// - iOS: Uses ios/VULU/GoogleService-Info.plist (must match project "vulugo")
+// - Android: Uses android/app/google-services.json (must match project "vulugo")
+// 
+// NOTE: deployment/production-config.ts exists but is NOT used for Firebase initialization.
+// It's only used by monitoringService.ts for other configs (Agora, security, etc.).
+// To reintroduce separate dev/prod Firebase configs later, modify this file to conditionally
+// select different firebaseConfig objects based on __DEV__ or environment variables.
 const firebaseConfig = {
   apiKey: "AIzaSyBHL5BpkQRDe-03hE5-7TYcbr2aad1ezqg",
   authDomain: "vulugo.firebaseapp.com",

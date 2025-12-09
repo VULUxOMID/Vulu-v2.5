@@ -383,20 +383,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    */
   const checkAdminStatus = async (firebaseUser: User) => {
     try {
-      const tokenResult = await firebaseUser.getIdTokenResult();
+      console.log(`[ADMIN] Checking admin status for user: ${firebaseUser.uid} (${firebaseUser.email})`);
+      const tokenResult = await firebaseUser.getIdTokenResult(true); // Force refresh to get latest claims
       const adminStatus = tokenResult.claims.admin === true;
       const level = tokenResult.claims.adminLevel as string | undefined;
+
+      console.log(`[ADMIN] Token claims:`, {
+        hasAdminClaim: tokenResult.claims.admin !== undefined,
+        adminValue: tokenResult.claims.admin,
+        adminLevel: level,
+        allClaims: Object.keys(tokenResult.claims)
+      });
 
       if (mounted.current) {
         setIsAdmin(adminStatus);
         setAdminLevel(level || null);
 
         if (adminStatus) {
-          console.log(`👑 Admin user detected: ${firebaseUser.email} (${level || 'admin'})`);
+          console.log(`[ADMIN] ✅ Admin user detected: ${firebaseUser.email} (level: ${level || 'admin'})`);
+        } else {
+          console.log(`[ADMIN] ❌ User is not an admin: ${firebaseUser.email}`);
         }
       }
-    } catch (error) {
-      console.error('Error checking admin status:', error);
+    } catch (error: any) {
+      console.error(`[ADMIN] ❌ Error checking admin status for ${firebaseUser.uid}:`, {
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
       if (mounted.current) {
         setIsAdmin(false);
         setAdminLevel(null);
@@ -584,6 +598,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         // Get user profile from Firestore with safe async wrapper
         try {
+          console.log(`[PROFILE] Loading profile from Firestore for user: ${firebaseUser.uid}`);
           const profile = await safeAsync(async () => {
             return await firestoreService.getUser(firebaseUser.uid);
           }, null, 'firestoreService.getUser');
@@ -591,13 +606,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (mounted.current) {
             if (profile && profile.username && profile.displayName) {
               // Real profile exists with proper data - use it
-              console.log(`✅ Loaded existing profile for user ${firebaseUser.uid}:`, {
+              console.log(`[PROFILE] ✅ Loaded COMPLETE profile for user ${firebaseUser.uid}:`, {
                 displayName: profile.displayName,
                 username: profile.username,
                 email: profile.email,
-                onboardingCompleted: profile.onboardingCompleted
+                hasGold: typeof profile.gold !== 'undefined',
+                gold: profile.gold || profile.currencyBalances?.gold || 0,
+                hasGems: typeof profile.gems !== 'undefined',
+                gems: profile.gems || profile.currencyBalances?.gems || 0,
+                onboardingCompleted: profile.onboardingCompleted,
+                profileComplete: true
               });
               safeSetUserProfile(profile);
+              console.log(`[PROFILE] ✅ Complete profile state set - hasUserProfile = true, username = "${profile.username}", displayName = "${profile.displayName}"`);
 
               // CRITICAL: If profile has username and displayName, it's a complete profile
               // Mark onboarding as completed to prevent legacy accounts from getting stuck
@@ -620,93 +641,135 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 await encryptionService.initialize(firebaseUser.uid);
               }, undefined, 'encryptionService.initialize');
             } else {
-              // Profile missing or incomplete - wait for signup process to complete
-              console.log(`⏳ Profile incomplete for user ${firebaseUser.uid}, waiting for signup sync...`);
-
-              // Use safe timer for delay
-              await new Promise(resolve => {
-                safeTimer.current.setTimeout(() => resolve(undefined), 2000);
+              // Profile missing or incomplete - try to fix it immediately
+              console.log(`[PROFILE] ⏳ Profile incomplete for user ${firebaseUser.uid}:`, {
+                hasProfile: !!profile,
+                hasUsername: !!profile?.username,
+                hasDisplayName: !!profile?.displayName,
+                profileKeys: profile ? Object.keys(profile) : []
               });
+              
+              // Try to ensure profile is complete (self-healing)
+              const fixedProfile = await safeAsync(async () => {
+                // If profile exists but is incomplete, update it
+                if (profile) {
+                  console.log(`[PROFILE] Profile exists but incomplete, attempting to fix...`);
+                  return await firestoreService.ensureProfileComplete(firebaseUser.uid, firebaseUser);
+                } else {
+                  // Profile doesn't exist, create it
+                  console.log(`[PROFILE] Profile does not exist, creating new profile...`);
+                  const emailPrefix = firebaseUser.email?.split('@')[0] || 'user';
+                  const defaultDisplayName = firebaseUser.displayName || emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+                  const defaultUsername = emailPrefix.toLowerCase();
+                  
+                  const profileToCreate = {
+                    uid: firebaseUser.uid,
+                    email: firebaseUser.email || '',
+                    displayName: defaultDisplayName,
+                    username: defaultUsername,
+                    photoURL: firebaseUser.photoURL || undefined,
+                    currencyBalances: {
+                      gold: 0,
+                      gems: 0,
+                      tokens: 0,
+                      lastUpdated: new Date()
+                    },
+                    level: 1,
+                    status: 'online' as const,
+                    isOnline: true,
+                    lastActivity: new Date(),
+                    allowFriendRequests: true,
+                    allowMessagesFromStrangers: false,
+                    showOnlineStatus: true,
+                    friends: [],
+                    blockedUsers: [],
+                    bio: '',
+                    customStatus: '',
+                    subscriptionPlan: 'free' as const,
+                    subscriptionStatus: 'expired' as const,
+                  };
+                  
+                  await firestoreService.createUser(profileToCreate);
+                  console.log(`[PROFILE] ✅ Created new profile in Firestore for ${firebaseUser.uid}`);
+                  
+                  // Reload the created profile
+                  return await firestoreService.getUser(firebaseUser.uid);
+                }
+              }, null, 'firestoreService.ensureProfileComplete or createUser');
 
-              const updatedProfile = await safeAsync(async () => {
-                return await firestoreService.getUser(firebaseUser.uid);
-              }, null, 'firestoreService.getUser (retry)');
-
-              if (updatedProfile && updatedProfile.username && updatedProfile.displayName) {
-                console.log(`✅ Profile sync completed for user ${firebaseUser.uid}:`, {
-                  displayName: updatedProfile.displayName,
-                  username: updatedProfile.username,
-                  email: updatedProfile.email,
-                  onboardingCompleted: updatedProfile.onboardingCompleted
+              if (fixedProfile && fixedProfile.username && fixedProfile.displayName) {
+                console.log(`[PROFILE] ✅ Profile FIXED/CREATED successfully for user ${firebaseUser.uid}:`, {
+                  displayName: fixedProfile.displayName,
+                  username: fixedProfile.username,
+                  email: fixedProfile.email,
+                  hasGold: typeof fixedProfile.gold !== 'undefined',
+                  gold: fixedProfile.gold || fixedProfile.currencyBalances?.gold || 0,
+                  hasGems: typeof fixedProfile.gems !== 'undefined',
+                  gems: fixedProfile.gems || fixedProfile.currencyBalances?.gems || 0,
+                  wasFixed: !!profile, // true if we fixed existing, false if we created new
+                  profileComplete: true
                 });
-                safeSetUserProfile(updatedProfile);
+                safeSetUserProfile(fixedProfile);
+                console.log(`[PROFILE] ✅ Fixed profile state set - hasUserProfile = true, username = "${fixedProfile.username}", displayName = "${fixedProfile.displayName}"`);
 
-                // CRITICAL: If profile has username and displayName, it's a complete profile
-                // Mark onboarding as completed to prevent legacy accounts from getting stuck
-                if (updatedProfile.onboardingCompleted !== false) {
-                  // If onboardingCompleted is true OR undefined (legacy accounts), mark as complete
+                // Mark onboarding as completed
+                if (fixedProfile.onboardingCompleted !== false) {
                   await safeAsync(async () => {
                     await markOnboardingCompleted();
-                    console.log('✅ Onboarding flag set for synced profile (prevents onboarding loop)');
-                  }, undefined, 'markOnboardingCompleted.onProfileSync');
+                    console.log(`[PROFILE] ✅ Onboarding flag set for fixed profile`);
+                  }, undefined, 'markOnboardingCompleted.onProfileFix');
                 }
 
-                // Start profile synchronization for this user
+                // Start profile synchronization
                 await safeAsync(async () => {
                   profileSyncService.startProfileSync(firebaseUser.uid);
-                  console.log(`✅ Profile sync started for user ${firebaseUser.uid}`);
-                }, undefined, 'profileSyncService.startProfileSync (retry)');
+                  console.log(`[PROFILE] ✅ Profile sync started for user ${firebaseUser.uid}`);
+                }, undefined, 'profileSyncService.startProfileSync (after fix)');
 
-                // Initialize encryption for existing user
+                // Initialize encryption
                 await safeAsync(async () => {
                   await encryptionService.initialize(firebaseUser.uid);
-                }, undefined, 'encryptionService.initialize (retry)');
+                }, undefined, 'encryptionService.initialize (after fix)');
               } else {
-                // Only create fallback if this is truly a new user (not from signup flow)
-                console.warn(`⚠️ No profile found after waiting - creating minimal fallback for ${firebaseUser.uid}`);
+                // Fallback: set minimal profile in state (ensures hasUserProfile = true)
+                console.warn(`[PROFILE] ⚠️ Could not fix/create profile, using minimal fallback`);
+                const emailPrefix = firebaseUser.email?.split('@')[0] || 'user';
                 const minimalProfile = {
                   uid: firebaseUser.uid,
                   email: firebaseUser.email || '',
-                  displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-                  username: firebaseUser.email?.split('@')[0] || `user_${firebaseUser.uid.substring(0, 8)}`,
+                  displayName: firebaseUser.displayName || emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1),
+                  username: emailPrefix.toLowerCase(),
                   photoURL: firebaseUser.photoURL || undefined,
                   gold: 0,
-                  gems: 0, // Start with zero balance
+                  gems: 0,
                   level: 1,
-                  status: 'online' as const,
-                  isOnline: true,
-                  lastActivity: new Date(),
-                  allowFriendRequests: true,
-                  allowMessagesFromStrangers: false,
-                  showOnlineStatus: true,
-                  friends: [],
-                  blockedUsers: [],
-                  bio: '',
-                  customStatus: '',
-                  // Subscription info (default to inactive plan)
-                  subscriptionPlan: 'free' as const,
-                  subscriptionStatus: 'expired' as const,
                 };
                 safeSetUserProfile(minimalProfile);
-                // Don't create in Firestore - let signup process handle it
+                console.log(`[PROFILE] ✅ Minimal profile state set - hasUserProfile will be true`);
               }
             }
           }
-        } catch (error) {
-          console.error('Error loading user profile:', error);
-          // Only set minimal fallback on error
+        } catch (error: any) {
+          console.error(`[PROFILE] ❌ Error loading user profile for ${firebaseUser.uid}:`, {
+            error: error.message,
+            code: error.code,
+            stack: error.stack
+          });
+          // Only set minimal fallback on error (ensures hasUserProfile = true)
           if (mounted.current && firebaseUser) {
+            const emailPrefix = firebaseUser.email?.split('@')[0] || 'user';
             const errorFallbackProfile = {
               uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-              username: firebaseUser.email?.split('@')[0] || 'user',
-              photoURL: firebaseUser.photoURL,
+              email: firebaseUser.email || '',
+              displayName: firebaseUser.displayName || emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1),
+              username: emailPrefix.toLowerCase(),
+              photoURL: firebaseUser.photoURL || undefined,
               gold: 0,
-              gems: 0, // Start with zero balance
+              gems: 0,
               level: 1,
             };
             safeSetUserProfile(errorFallbackProfile);
+            console.log(`[PROFILE] ✅ Error fallback profile state set - hasUserProfile will be true`);
           }
         }
       } else {

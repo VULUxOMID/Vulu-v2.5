@@ -97,8 +97,10 @@ class VirtualCurrencyService {
    */
   async getCurrencyBalances(userId: string): Promise<CurrencyBalance> {
     try {
+      console.log(`[GOLD] Getting currency balances for user: ${userId}`);
       // Check authentication state first
       if (!this.isAuthenticated()) {
+        console.log(`[GOLD] ⚠️ User not authenticated, returning zero balances`);
         // Return default balance for guest users
         return {
           gold: 0,
@@ -113,6 +115,7 @@ class VirtualCurrencyService {
         const userDoc = await transaction.get(userRef);
 
         if (!userDoc.exists()) {
+          console.log(`[GOLD] ⚠️ User document does not exist, creating initial balance for: ${userId}`);
           // Create initial balance for new user
           const initialBalance: CurrencyBalance = {
             gold: 0, // New users start with 0 gold
@@ -128,6 +131,7 @@ class VirtualCurrencyService {
             }
           }, { merge: true });
 
+          console.log(`[GOLD] ✅ Created initial balance for new user: ${userId}`, initialBalance);
           return initialBalance;
         }
 
@@ -139,6 +143,15 @@ class VirtualCurrencyService {
           lastUpdated: serverTimestamp()
         };
 
+        console.log(`[GOLD] Raw balances from Firestore:`, {
+          gold: balances.gold,
+          gems: balances.gems,
+          tokens: balances.tokens,
+          hasCurrencyBalances: !!userData.currencyBalances,
+          hasLegacyGold: typeof userData.gold !== 'undefined',
+          legacyGold: userData.gold
+        });
+
         // CRITICAL: Sanitize all balances to ensure they're never negative
         const sanitizedBalances = {
           gold: sanitizeCurrencyAmount(balances.gold),
@@ -146,6 +159,8 @@ class VirtualCurrencyService {
           tokens: sanitizeCurrencyAmount(balances.tokens),
           lastUpdated: this.safeToDate(balances.lastUpdated)
         };
+
+        console.log(`[GOLD] Sanitized balances:`, sanitizedBalances);
 
         // If any balance was negative or invalid, fix it in Firestore
         if (balances.gold < 0 || balances.gems < 0 || balances.tokens < 0 || 
@@ -164,9 +179,15 @@ class VirtualCurrencyService {
           });
         }
 
+        console.log(`[GOLD] ✅ Successfully retrieved balances for ${userId}:`, sanitizedBalances);
         return sanitizedBalances;
       });
     } catch (error: any) {
+      console.error(`[GOLD] ❌ Error getting currency balances for ${userId}:`, {
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
       FirebaseErrorHandler.logError('getCurrencyBalances', error);
       throw new Error(`Failed to get currency balances: ${error.message}`);
     }
@@ -179,6 +200,7 @@ class VirtualCurrencyService {
     try {
       const userRef = doc(db, 'users', userId);
 
+      console.log(`[GOLD] Setting up real-time listener for user: ${userId}`);
       return onSnapshot(userRef, (doc) => {
         if (doc.exists()) {
           const userData = doc.data();
@@ -189,16 +211,21 @@ class VirtualCurrencyService {
             lastUpdated: new Date()
           };
 
-          callback({
+          const balanceData = {
             gold: balances.gold || 0,
             gems: balances.gems || 0,
             tokens: balances.tokens || 0,
             lastUpdated: this.safeToDate(balances.lastUpdated)
-          });
+          };
+          console.log(`[GOLD] Real-time balance update for ${userId}:`, balanceData);
+          callback(balanceData);
+        } else {
+          console.warn(`[GOLD] ⚠️ User document does not exist in listener for: ${userId}`);
         }
       }, (error) => {
         // Handle permission errors gracefully for guest users
         if (FirebaseErrorHandler.isPermissionError(error)) {
+          console.warn(`[GOLD] ⚠️ Permission denied for currency listener (user: ${userId}), returning zero balances`);
           // Provide zero balances for guest users (no dummy data)
           callback({
             gold: 0,
@@ -210,7 +237,11 @@ class VirtualCurrencyService {
         }
 
         // Log non-permission errors
-        console.error('Currency balances listener error:', error);
+        console.error(`[GOLD] ❌ Currency balances listener error for ${userId}:`, {
+          error: error.message,
+          code: error.code,
+          stack: error.stack
+        });
         FirebaseErrorHandler.logError('onCurrencyBalances', error);
       });
     } catch (error: any) {

@@ -2052,12 +2052,12 @@ const HomeScreen = () => {
 
   // Subscribe to current event updates from Firestore
   useEffect(() => {
-    console.log('🔍 Setting up event listener...');
-    console.log('🔍 DB initialized?', !!firestoreDb, 'Functions initialized?', !!cloudFunctions);
+    console.log(`[EVENT] Setting up event listener for HomeScreen...`);
+    console.log(`[EVENT] DB initialized?`, !!firestoreDb, 'Functions initialized?', !!cloudFunctions);
 
     const unsubscribe = eventService.onEventSnapshot(async (event) => {
       if (event) {
-        console.log('✅ Event update received:', {
+        console.log(`[EVENT] ✅ Event update received in HomeScreen:`, {
           eventId: event.eventId,
           cycleNumber: event.cycleNumber,
           totalEntries: event.totalEntries,
@@ -2072,7 +2072,7 @@ const HomeScreen = () => {
 
         // Calculate time left using server time offset
         const timeLeft = eventService.calculateTimeLeft(event.endTime);
-        console.log('⏱️ Time left calculated:', timeLeft, 'seconds');
+        console.log(`[EVENT] ⏱️ Time left calculated:`, timeLeft, 'seconds');
         setEventTimeLeft(timeLeft);
 
         // Check if user won this cycle
@@ -2089,17 +2089,17 @@ const HomeScreen = () => {
           // Check if user has actually entered this new cycle from the database
           if (userProfile?.uid) {
             const hasEntered = await eventService.hasUserEntered(userProfile.uid);
-            console.log('🔍 Checked entry status for new cycle:', hasEntered);
+            console.log(`[EVENT] 🔍 Checked entry status for new cycle:`, hasEntered);
             setHasEnteredEvent(hasEntered);
           }
         }
       } else {
-        console.warn('⚠️ No current event found - manageEventCycles may not have run yet');
+        console.warn(`[EVENT] ⚠️ No current event found - manageEventCycles may not have run yet`);
       }
     });
 
     return () => {
-      console.log('🧹 Cleaning up event listener');
+      console.log(`[EVENT] 🧹 Cleaning up event listener in HomeScreen`);
       unsubscribe();
     };
   }, [userProfile?.uid]);
@@ -2112,11 +2112,16 @@ const HomeScreen = () => {
       }
 
       try {
+        console.log(`[EVENT] Checking initial entry status for user: ${userProfile.uid}`);
         const hasEntered = await eventService.hasUserEntered(userProfile.uid);
-        console.log('🔍 Initial entry status check:', hasEntered);
+        console.log(`[EVENT] ✅ Initial entry status check:`, hasEntered);
         setHasEnteredEvent(hasEntered);
-      } catch (error) {
-        console.error('Failed to check entry status:', error);
+      } catch (error: any) {
+        console.error(`[EVENT] ❌ Failed to check entry status:`, {
+          error: error.message,
+          code: error.code,
+          stack: error.stack
+        });
       }
     };
 
@@ -2250,18 +2255,42 @@ const HomeScreen = () => {
           `You're in! Ticket #${result.ticketNumber}\n\nGood luck! 🍀`
         );
       } else if (result.error) {
-        // Handle specific errors
-        if (result.error.includes('Insufficient gold')) {
+        // Handle specific errors gracefully
+        if (result.error.includes('Insufficient gold') || result.error.includes('Not enough gold')) {
           Alert.alert('Not Enough Gold', `You need ${eventEntryCost} gold to enter.`);
-        } else if (result.error.includes('expired')) {
-          Alert.alert('Event Expired', 'This event has ended. Wait for the next one!');
+        } else if (result.error.includes('expired') || result.error.includes('ended') || (result as any).isExpired) {
+          // Event expired - show friendly message and don't retry
+          Alert.alert(
+            'Event Ended',
+            'This event has ended. Please wait for the next event cycle.',
+            [{ text: 'OK', style: 'default' }]
+          );
+          console.log(`[EVENT] ⚠️ Event expired - gracefully handled, not retrying`);
+        } else if (result.error.includes('already entered')) {
+          Alert.alert('Already Entered', 'You have already entered this event.');
+          setHasEnteredEvent(true);
         } else {
           Alert.alert('Entry Failed', result.error);
         }
       }
     } catch (error: any) {
-      console.error('Failed to enter event:', error);
-      Alert.alert('Error', 'Failed to enter event. Please try again.');
+      console.error(`[EVENT] ❌ Error entering event:`, {
+        error: error.message,
+        code: error.code
+      });
+      
+      // Handle expired event errors from catch block too
+      if (error.code === 'functions/failed-precondition' && 
+          (error.message?.toLowerCase().includes('expired') || error.message?.toLowerCase().includes('ended'))) {
+        Alert.alert(
+          'Event Ended',
+          'This event has ended. Please wait for the next event cycle.',
+          [{ text: 'OK', style: 'default' }]
+        );
+        console.log(`[EVENT] ⚠️ Event expired (from catch) - gracefully handled`);
+      } else {
+        Alert.alert('Error', 'Failed to enter event. Please try again.');
+      }
     } finally {
       setIsEnteringEvent(false);
     }

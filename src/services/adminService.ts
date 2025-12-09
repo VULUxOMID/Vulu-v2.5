@@ -125,19 +125,31 @@ class AdminService {
       const user = auth.currentUser;
 
       if (!user) {
+        console.log(`[ADMIN] No authenticated user found`);
         return false;
       }
+
+      console.log(`[ADMIN] Checking admin status for user: ${user.uid} (${user.email})`);
 
       // Check cache first
       const cached = this.adminCache.get(user.uid);
       if (cached && cached.expiresAt > Date.now()) {
+        console.log(`[ADMIN] Using cached admin status:`, cached.isAdmin);
         return cached.isAdmin;
       }
 
-      // Get fresh token with claims
+      // Get fresh token with claims (force refresh to get latest)
+      console.log(`[ADMIN] Fetching fresh token with claims...`);
       const tokenResult = await user.getIdTokenResult(true);
       const isAdmin = tokenResult.claims.admin === true;
       const adminLevel = tokenResult.claims.adminLevel as string | undefined;
+
+      console.log(`[ADMIN] Token claims result:`, {
+        hasAdminClaim: tokenResult.claims.admin !== undefined,
+        adminValue: tokenResult.claims.admin,
+        adminLevel: adminLevel,
+        allClaimKeys: Object.keys(tokenResult.claims)
+      });
 
       // Update cache
       this.adminCache.set(user.uid, {
@@ -146,9 +158,19 @@ class AdminService {
         expiresAt: Date.now() + this.CACHE_DURATION,
       });
 
+      if (isAdmin) {
+        console.log(`[ADMIN] ✅ User is admin (level: ${adminLevel || 'admin'})`);
+      } else {
+        console.log(`[ADMIN] ❌ User is not an admin`);
+      }
+
       return isAdmin;
-    } catch (error) {
-      console.error('Error checking admin status:', error);
+    } catch (error: any) {
+      console.error(`[ADMIN] ❌ Error checking admin status:`, {
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
       return false;
     }
   }
@@ -162,12 +184,14 @@ class AdminService {
       const user = auth.currentUser;
 
       if (!user) {
+        console.log(`[ADMIN] No authenticated user found for admin level check`);
         return null;
       }
 
       // Check cache first
       const cached = this.adminCache.get(user.uid);
       if (cached && cached.expiresAt > Date.now()) {
+        console.log(`[ADMIN] Using cached admin level:`, cached.level);
         return cached.level || null;
       }
 
@@ -175,6 +199,8 @@ class AdminService {
       const tokenResult = await user.getIdTokenResult(true);
       const isAdmin = tokenResult.claims.admin === true;
       const adminLevel = tokenResult.claims.adminLevel as string | undefined;
+
+      console.log(`[ADMIN] Admin level from token:`, adminLevel);
 
       // Update cache
       this.adminCache.set(user.uid, {
@@ -184,8 +210,12 @@ class AdminService {
       });
 
       return adminLevel || null;
-    } catch (error) {
-      console.error('Error getting admin level:', error);
+    } catch (error: any) {
+      console.error(`[ADMIN] ❌ Error getting admin level:`, {
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
       return null;
     }
   }

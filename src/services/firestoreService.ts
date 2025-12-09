@@ -230,33 +230,211 @@ class FirestoreService {
   // User operations
   async createUser(userData: Omit<AppUser, 'createdAt' | 'lastSeen'>): Promise<void> {
     try {
+      console.log(`[PROFILE] Creating/updating user profile in Firestore: users/${userData.uid}`);
       const userRef = doc(db, 'users', userData.uid);
-      await setDoc(userRef, {
+      
+      // Check if document already exists
+      const existingDoc = await getDoc(userRef);
+      const existingData = existingDoc.exists() ? existingDoc.data() : null;
+      
+      // Ensure currencyBalances exists if gold/gems are provided
+      const profileData: any = {
         ...userData,
         // Add lowercase fields for case-insensitive searching
         displayNameLower: (userData.displayName || '').toLowerCase(),
         usernameLower: (userData.username || '').toLowerCase(),
         emailLower: (userData.email || '').toLowerCase(),
-        createdAt: serverTimestamp(),
         lastSeen: serverTimestamp()
+      };
+
+      // Preserve existing currencyBalances if they exist, otherwise create from gold/gems or defaults
+      if (existingData?.currencyBalances) {
+        // Preserve existing currency balances - don't overwrite them
+        profileData.currencyBalances = existingData.currencyBalances;
+        console.log(`[PROFILE] Preserving existing currencyBalances:`, existingData.currencyBalances);
+      } else if (userData.currencyBalances) {
+        // Use provided currencyBalances
+        profileData.currencyBalances = userData.currencyBalances;
+        console.log(`[PROFILE] Using provided currencyBalances`);
+      } else if ((userData.gold !== undefined || userData.gems !== undefined)) {
+        // Create currencyBalances from legacy gold/gems fields
+        profileData.currencyBalances = {
+          gold: userData.gold || existingData?.gold || 0,
+          gems: userData.gems || existingData?.gems || 0,
+          tokens: 0,
+          lastUpdated: serverTimestamp()
+        };
+        console.log(`[PROFILE] Created currencyBalances from legacy gold/gems fields`);
+      } else if (existingData?.gold !== undefined || existingData?.gems !== undefined) {
+        // Preserve legacy gold/gems from existing data
+        profileData.currencyBalances = {
+          gold: existingData.gold || 0,
+          gems: existingData.gems || 0,
+          tokens: 0,
+          lastUpdated: serverTimestamp()
+        };
+        console.log(`[PROFILE] Created currencyBalances from existing legacy gold/gems`);
+      } else {
+        // No currency data at all - create empty balances (only for new profiles)
+        if (!existingDoc.exists()) {
+          profileData.currencyBalances = {
+            gold: 0,
+            gems: 0,
+            tokens: 0,
+            lastUpdated: serverTimestamp()
+          };
+          console.log(`[PROFILE] Created empty currencyBalances for new profile`);
+        }
+        // For existing profiles without currency data, don't overwrite - let ensureProfileComplete handle it
+      }
+
+      // Only set createdAt if document doesn't exist
+      if (!existingDoc.exists()) {
+        profileData.createdAt = serverTimestamp();
+      }
+
+      // Use setDoc with merge: true to update existing or create new
+      await setDoc(userRef, profileData, { merge: true });
+      console.log(`[PROFILE] ✅ User profile ${existingDoc.exists() ? 'updated' : 'created'} successfully:`, {
+        uid: userData.uid,
+        username: userData.username,
+        displayName: userData.displayName,
+        email: userData.email,
+        wasExisting: existingDoc.exists()
       });
     } catch (error: any) {
-      console.warn('Failed to create user in Firestore:', error.message);
-      // Don't throw error, just log it
+      console.error(`[PROFILE] ❌ Failed to create/update user in Firestore:`, {
+        uid: userData.uid,
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      
+      // Check if it's a permission error
+      if (error.code === 'permission-denied') {
+        console.error(`[PROFILE] 🔒 Permission denied - check Firestore security rules for users collection`);
+      }
+      
+      // Don't throw error, just log it - signup should still succeed
+    }
+  }
+
+  /**
+   * Ensure profile has required fields (username, displayName) - updates if missing
+   * This is a self-healing function that fixes incomplete profiles
+   */
+  async ensureProfileComplete(uid: string, firebaseUser: User): Promise<AppUser | null> {
+    try {
+      console.log(`[PROFILE] Ensuring profile is complete for user: ${uid}`);
+      const userRef = doc(db, 'users', uid);
+      const userDoc = await getDoc(userRef);
+
+      if (!userDoc.exists()) {
+        console.log(`[PROFILE] Profile does not exist, will be created by createUser`);
+        return null;
+      }
+
+      const existingData = userDoc.data() as AppUser;
+      const needsUpdate = !existingData.username || !existingData.displayName;
+
+      if (!needsUpdate) {
+        console.log(`[PROFILE] ✅ Profile is already complete`);
+        return existingData;
+      }
+
+      console.log(`[PROFILE] ⚠️ Profile is incomplete, updating with missing fields...`);
+      
+      // Generate defaults from email if missing
+      const emailPrefix = firebaseUser.email?.split('@')[0] || 'user';
+      const defaultDisplayName = existingData.displayName || firebaseUser.displayName || emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+      const defaultUsername = existingData.username || emailPrefix.toLowerCase();
+
+      const updates: any = {};
+      
+      if (!existingData.username) {
+        updates.username = defaultUsername;
+        updates.usernameLower = defaultUsername.toLowerCase();
+        console.log(`[PROFILE] Adding missing username: ${defaultUsername}`);
+      }
+      
+      if (!existingData.displayName) {
+        updates.displayName = defaultDisplayName;
+        updates.displayNameLower = defaultDisplayName.toLowerCase();
+        console.log(`[PROFILE] Adding missing displayName: ${defaultDisplayName}`);
+      }
+
+      // Preserve existing currencyBalances when updating
+      // Don't include currencyBalances in updates unless we're explicitly setting it
+      const updateData: any = {
+        ...updates,
+        lastSeen: serverTimestamp()
+      };
+
+      // Update the document (only updates the fields we specify, preserves everything else)
+      await updateDoc(userRef, updateData);
+
+      console.log(`[PROFILE] ✅ Profile updated with missing fields:`, updates);
+
+      // Reload and return the updated profile
+      const updatedDoc = await getDoc(userRef);
+      if (updatedDoc.exists()) {
+        const updatedData = updatedDoc.data() as AppUser;
+        console.log(`[PROFILE] ✅ Reloaded updated profile:`, {
+          username: updatedData.username,
+          displayName: updatedData.displayName,
+          hasCurrencyBalances: !!updatedData.currencyBalances
+        });
+        return updatedData;
+      }
+
+      return null;
+    } catch (error: any) {
+      console.error(`[PROFILE] ❌ Failed to ensure profile complete:`, {
+        uid,
+        error: error.message,
+        code: error.code
+      });
+      return null;
     }
   }
 
   async getUser(uid: string): Promise<AppUser | null> {
     try {
+      console.log(`[PROFILE] Fetching user document from Firestore: users/${uid}`);
       const userRef = doc(db, 'users', uid);
       const userSnap = await getDoc(userRef);
 
       if (userSnap.exists()) {
-        return userSnap.data() as AppUser;
+        const userData = userSnap.data() as AppUser;
+        const isComplete = !!(userData.username && userData.displayName);
+        console.log(`[PROFILE] ✅ User document found:`, {
+          uid: userData.uid,
+          username: userData.username || '(missing)',
+          displayName: userData.displayName || '(missing)',
+          email: userData.email,
+          isComplete: isComplete,
+          hasGold: typeof userData.gold !== 'undefined',
+          hasCurrencyBalances: !!userData.currencyBalances
+        });
+        if (!isComplete) {
+          console.log(`[PROFILE] ⚠️ Profile exists but is INCOMPLETE (missing username or displayName)`);
+        }
+        return userData;
       }
+      console.warn(`[PROFILE] ⚠️ User document does not exist: users/${uid}`);
       return null;
     } catch (error: any) {
-      console.warn('Failed to get user from Firestore:', error.message);
+      console.error(`[PROFILE] ❌ Failed to get user from Firestore (users/${uid}):`, {
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      
+      // Check if it's a permission error
+      if (error.code === 'permission-denied') {
+        console.error(`[PROFILE] 🔒 Permission denied - check Firestore security rules for users collection`);
+      }
+      
       return null;
     }
   }

@@ -92,21 +92,32 @@ const ProfileScreen = () => {
     isSubscriptionActive
   } = useSubscription();
   
-  // Get display name and username directly from userProfile for accuracy
-  const displayName = userProfile?.displayName || 'User';
-  const username = userProfile?.username || '';
+  // Get display name and username - fallback to Firebase Auth user if profile is incomplete
+  const displayName = userProfile?.displayName || user?.displayName || user?.email?.split('@')[0] || 'User';
+  const username = userProfile?.username || user?.email?.split('@')[0] || '';
   
   // Debug logging to track profile data
   useEffect(() => {
-    console.log('📱 ProfileScreen - Current profile data:', {
+    console.log(`[PROFILE] ProfileScreen - Current profile data:`, {
       displayName,
       username,
       userProfileDisplayName: userProfile?.displayName,
       userProfileUsername: userProfile?.username,
+      userProfileEmail: userProfile?.email,
+      userProfileUid: userProfile?.uid,
+      userEmail: user?.email,
+      userDisplayName: user?.displayName,
+      hasGold: typeof userProfile?.gold !== 'undefined',
+      gold: userProfile?.gold || userProfile?.currencyBalances?.gold || 0,
+      hasGems: typeof userProfile?.gems !== 'undefined',
+      gems: userProfile?.gems || userProfile?.currencyBalances?.gems || 0,
       isGuest,
-      hasUserProfile: !!userProfile
+      hasUserProfile: !!userProfile,
+      hasUser: !!user,
+      userId: user?.uid,
+      profileSource: userProfile ? 'userProfile' : (user ? 'Firebase Auth user' : 'none')
     });
-  }, [displayName, username, userProfile, isGuest]);
+  }, [displayName, username, userProfile, isGuest, user]);
   
   // Use UserStatusContext instead of local state
   const { 

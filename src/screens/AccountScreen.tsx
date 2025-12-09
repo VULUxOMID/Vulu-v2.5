@@ -62,13 +62,40 @@ const AccountScreen = () => {
 
   // Load user data from Firebase
   useEffect(() => {
-    if (userProfile && !isGuest) {
-      setUsername(userProfile.username || '');
-      setDisplayName(userProfile.displayName || '');
-      setEmail(userProfile.email || '');
-      setPhone(userProfile.phoneNumber || '');
+    console.log(`[ACCOUNT] Loading user data:`, {
+      hasUserProfile: !!userProfile,
+      isGuest: isGuest,
+      hasUser: !!user,
+      username: userProfile?.username,
+      displayName: userProfile?.displayName,
+      email: userProfile?.email || user?.email
+    });
+    
+    // If user is signed in (not guest), always try to load profile data
+    // Even if profile is incomplete, we should show what we have
+    if (user && !isGuest) {
+      // Use userProfile if available, otherwise fall back to Firebase Auth user data
+      const displayNameToUse = userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'User';
+      const usernameToUse = userProfile?.username || user.email?.split('@')[0] || '';
+      const emailToUse = userProfile?.email || user.email || '';
+      
+      setUsername(usernameToUse);
+      setDisplayName(displayNameToUse);
+      setEmail(emailToUse);
+      setPhone(userProfile?.phoneNumber || '');
+      
+      console.log(`[ACCOUNT] ✅ User data loaded into form fields:`, {
+        username: usernameToUse,
+        displayName: displayNameToUse,
+        email: emailToUse,
+        source: userProfile ? 'userProfile' : 'Firebase Auth user'
+      });
+    } else if (isGuest) {
+      console.log(`[ACCOUNT] User is guest - skipping profile data load`);
+    } else {
+      console.warn(`[ACCOUNT] ⚠️ No user or userProfile available`);
     }
-  }, [userProfile, isGuest]);
+  }, [userProfile, isGuest, user]);
 
   // Validate username uniqueness
   const validateUsername = async (newUsername: string): Promise<boolean> => {

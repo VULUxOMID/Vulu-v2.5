@@ -96,16 +96,30 @@ class EventService {
    */
   async getCurrentEvent(): Promise<Event | null> {
     try {
+      console.log(`[EVENT] Getting current event from Firestore...`);
       const eventRef = doc(db, 'globalEvents', 'current');
       const eventDoc = await getDoc(eventRef);
 
       if (!eventDoc.exists()) {
+        console.warn(`[EVENT] ⚠️ No current event document found in Firestore`);
         return null;
       }
 
-      return eventDoc.data() as Event;
+      const eventData = eventDoc.data() as Event;
+      console.log(`[EVENT] ✅ Current event loaded:`, {
+        eventId: eventData.eventId,
+        status: eventData.status,
+        cycleNumber: eventData.cycleNumber,
+        totalEntries: eventData.totalEntries,
+        endTime: eventData.endTime?.toDate?.()
+      });
+      return eventData;
     } catch (error: any) {
-      console.error('Failed to get current event:', error);
+      console.error(`[EVENT] ❌ Failed to get current event:`, {
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
       FirebaseErrorHandler.logError('getCurrentEvent', error);
       return null;
     }
@@ -117,6 +131,7 @@ class EventService {
    */
   onEventSnapshot(callback: (event: Event | null) => void): () => void {
     try {
+      console.log(`[EVENT] Setting up real-time event listener...`);
       const eventRef = doc(db, 'globalEvents', 'current');
 
       return onSnapshot(
@@ -124,25 +139,30 @@ class EventService {
         (snapshot) => {
           if (snapshot.exists()) {
             const event = snapshot.data() as Event;
-            console.log('📸 Event snapshot received:', {
+            console.log(`[EVENT] ✅ Event snapshot received:`, {
               eventId: event.eventId,
               status: event.status,
+              cycleNumber: event.cycleNumber,
+              totalEntries: event.totalEntries,
               endTime: event.endTime?.toDate?.()
             });
             callback(event);
           } else {
-            console.warn('📭 Event snapshot empty - document does not exist');
-            console.warn('💡 Run manageEventCycles Cloud Function to create first event');
+            console.warn(`[EVENT] ⚠️ Event snapshot empty - document does not exist`);
+            console.warn(`[EVENT] 💡 Run manageEventCycles Cloud Function to create first event`);
             callback(null);
           }
         },
         (error) => {
-          console.error('❌ Event snapshot listener error:', error);
-          console.error('❌ Error code:', error.code);
-          console.error('❌ Error message:', error.message);
+          console.error(`[EVENT] ❌ Event snapshot listener error:`, {
+            error: error.message,
+            code: error.code,
+            stack: error.stack
+          });
 
           if (error.code === 'permission-denied') {
-            console.error('🔒 Firestore security rules may be blocking read access to globalEvents/current');
+            console.error(`[EVENT] 🔒 Firestore security rules may be blocking read access to globalEvents/current`);
+            console.error(`[EVENT] 🔒 Check that user is authenticated and rules allow read access`);
           }
 
           FirebaseErrorHandler.logError('onEventSnapshot', error);
@@ -152,7 +172,11 @@ class EventService {
         }
       );
     } catch (error: any) {
-      console.error('❌ Failed to set up event listener:', error);
+      console.error(`[EVENT] ❌ Failed to set up event listener:`, {
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
       FirebaseErrorHandler.logError('onEventSnapshot', error);
 
       // Return no-op unsubscribe function
@@ -182,16 +206,29 @@ class EventService {
 
       return result.data;
     } catch (error: any) {
-      console.error('Failed to enter event:', error);
+      console.error(`[EVENT] ❌ Failed to enter event:`, {
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
       FirebaseErrorHandler.logError('enterEvent', error);
 
-      // Extract error message from Firebase error
+      // Extract error message from Firebase error with better handling
       let errorMessage = 'Failed to enter event';
+      let isExpired = false;
       
       if (error.code === 'functions/unauthenticated') {
         errorMessage = 'You must be signed in to enter';
       } else if (error.code === 'functions/failed-precondition') {
-        errorMessage = error.message || 'Event requirements not met';
+        // Check if it's an expired event
+        const errorMsg = error.message || '';
+        if (errorMsg.toLowerCase().includes('expired') || errorMsg.toLowerCase().includes('ended')) {
+          errorMessage = 'This event has ended. Please wait for the next one.';
+          isExpired = true;
+          console.log(`[EVENT] ⚠️ Event has expired - gracefully handling`);
+        } else {
+          errorMessage = errorMsg || 'Event requirements not met';
+        }
       } else if (error.code === 'functions/already-exists') {
         errorMessage = 'You have already entered this event';
       } else if (error.message) {
@@ -200,7 +237,8 @@ class EventService {
 
       return {
         success: false,
-        error: errorMessage
+        error: errorMessage,
+        isExpired // Add flag to indicate expired event
       };
     }
   }

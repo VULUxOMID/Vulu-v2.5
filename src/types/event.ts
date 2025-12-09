@@ -54,6 +54,7 @@ export interface EventEntryResult {
   ticketNumber?: number;
   alreadyEntered?: boolean;
   error?: string;
+  isExpired?: boolean; // Flag to indicate if event has expired
 }
 
 /**

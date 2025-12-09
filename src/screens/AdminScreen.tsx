@@ -131,11 +131,40 @@ const AdminScreen: React.FC = () => {
 
   const checkAdminAccess = async () => {
     try {
+      console.log(`[ADMIN] Checking admin access for screen...`);
       setLoading(true);
+      
+      // Add timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        if (loading) {
+          console.warn(`[ADMIN] ⚠️ Admin check timeout after 10 seconds`);
+          setLoading(false);
+          Alert.alert(
+            'Timeout',
+            'Admin verification is taking too long. Please check your connection and try again.',
+            [
+              {
+                text: 'OK',
+                onPress: () => router.back(),
+              },
+            ]
+          );
+        }
+      }, 10000);
+
       const adminStatus = await adminService.isAdmin();
       const level = await adminService.getAdminLevel();
 
+      clearTimeout(timeoutId);
+
+      console.log(`[ADMIN] Admin check result:`, {
+        isAdmin: adminStatus,
+        level: level,
+        userId: user?.uid
+      });
+
       if (!adminStatus) {
+        console.warn(`[ADMIN] ❌ Access denied - user is not an admin`);
         Alert.alert(
           'Access Denied',
           'You do not have admin privileges.',
@@ -146,15 +175,21 @@ const AdminScreen: React.FC = () => {
             },
           ]
         );
+        setLoading(false);
         return;
       }
 
+      console.log(`[ADMIN] ✅ Admin access granted (level: ${level})`);
       setIsAdmin(adminStatus);
       setAdminLevel(level);
       await loadData();
-    } catch (error) {
-      console.error('Error checking admin access:', error);
-      Alert.alert('Error', 'Failed to verify admin access');
+    } catch (error: any) {
+      console.error(`[ADMIN] ❌ Error checking admin access:`, {
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      Alert.alert('Error', 'Failed to verify admin access. Please try again.');
       router.back();
     } finally {
       setLoading(false);
@@ -163,16 +198,26 @@ const AdminScreen: React.FC = () => {
 
   const loadData = async () => {
     try {
+      console.log(`[ADMIN] Loading admin dashboard data...`);
       const [statsData, logsData] = await Promise.all([
         adminService.getAdminStats(),
         adminService.getAdminLogs(20),
       ]);
 
+      console.log(`[ADMIN] ✅ Admin data loaded:`, {
+        statsLoaded: !!statsData,
+        logsCount: logsData?.length || 0
+      });
+
       setStats(statsData);
       setLogs(logsData);
-    } catch (error) {
-      console.error('Error loading admin data:', error);
-      Alert.alert('Error', 'Failed to load admin data');
+    } catch (error: any) {
+      console.error(`[ADMIN] ❌ Error loading admin data:`, {
+        error: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      Alert.alert('Error', 'Failed to load admin data. Please try again.');
     }
   };
 
