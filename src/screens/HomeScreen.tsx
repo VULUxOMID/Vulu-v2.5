@@ -32,6 +32,7 @@ import { useAuth } from '../context/AuthContext';
 import { safePush, safePropertySet } from '../utils/safePropertySet';
 import authService from '../services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { debugTestWrite } from '../services/debugService';
 
 import GuestModeIndicator from '../components/GuestModeIndicator';
 
@@ -2017,6 +2018,22 @@ const HomeScreen = () => {
     }
   };
 
+  // Minimal debug Firestore write button handler
+  const handleDebugWrite = async () => {
+    const userId = user?.uid;
+    if (!userId) {
+      console.log('[DEBUG_WRITE] ⚠️ No user.uid, cannot test write');
+      Alert.alert('Debug Write', 'No user ID available.');
+      return;
+    }
+    try {
+      await debugTestWrite(userId);
+      Alert.alert('Debug Write', 'Debug write succeeded.');
+    } catch (error) {
+      Alert.alert('Debug Write', 'Debug write failed. Check logs.');
+    }
+  };
+
   // Additional state for gold currency popup
   const [showGoldPopup, setShowGoldPopup] = useState(false);
   const [sliderValue, setSliderValue] = useState(10); // Default gems to convert
@@ -3041,6 +3058,26 @@ const HomeScreen = () => {
         >
           <MaterialCommunityIcons name="gold" size={18} color="#FFD700" />
           <Text style={styles.goldBalanceText}>{formatCurrencyCompact(goldBalance)}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Debug Firestore write button (dev aid) */}
+      <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+        <TouchableOpacity
+          onPress={handleDebugWrite}
+          style={{
+            backgroundColor: '#2f2f35',
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            borderRadius: 10,
+            alignItems: 'center',
+            borderWidth: 1,
+            borderColor: '#444'
+          }}
+        >
+          <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>
+            ⚙️ Debug Firestore Write
+          </Text>
         </TouchableOpacity>
       </View>
 
