@@ -33,6 +33,7 @@ let auth!: Auth;
 let db!: Firestore;
 let storage!: FirebaseStorage;
 let functions!: Functions;
+const FUNCTIONS_REGION = 'us-central1';
 
 // Initialization status
 let initializationAttempted = false;
@@ -53,7 +54,17 @@ const initializeFirebase = (): { success: boolean; error?: Error } => {
 
     // Initialize Firebase app
     app = initializeApp(firebaseConfig);
-    console.log('✅ Firebase app initialized');
+    console.log('✅ Firebase app initialized', {
+      projectId: app.options?.projectId,
+      functionsRegion: FUNCTIONS_REGION
+    });
+
+    if (app.options?.projectId && app.options.projectId !== 'vulugo') {
+      console.warn('⚠️ Firebase project mismatch detected', {
+        expected: 'vulugo',
+        actual: app.options.projectId
+      });
+    }
 
     // Initialize Auth with platform-specific persistence (no top-level await)
     try {
@@ -121,11 +132,9 @@ const initializeFirebase = (): { success: boolean; error?: Error } => {
     storage = getStorage(app);
     console.log('✅ Firebase Storage initialized');
 
-    // Initialize Functions
-    // Note: getFunctions(app) without region defaults to us-central1
-    // This matches the deployment region for Cloud Functions
-    functions = getFunctions(app);
-    console.log('✅ Firebase Functions initialized (region: us-central1, default)');
+    // Initialize Functions with explicit region
+    functions = getFunctions(app, FUNCTIONS_REGION);
+    console.log('✅ Firebase Functions initialized', { region: FUNCTIONS_REGION });
 
     // Development environment setup
     if (__DEV__) {

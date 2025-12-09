@@ -260,10 +260,20 @@ class VirtualCurrencyService {
     description: string,
     metadata?: any
   ): Promise<Transaction> {
+    const userEmail = auth?.currentUser?.email || 'unknown';
     try {
       if (amount <= 0) {
         throw new Error('Amount must be positive');
       }
+
+      console.log('[GOLD_WRITE] 🚀 Starting addCurrency:', {
+        userId,
+        userEmail,
+        currencyType,
+        amount,
+        description,
+        metadata
+      });
 
       return await runTransaction(db, async (transaction) => {
         const userRef = doc(db, 'users', userId);
@@ -299,6 +309,15 @@ class VirtualCurrencyService {
         const transactionRef = doc(collection(db, 'transactions'));
         transaction.set(transactionRef, transactionData);
 
+        console.log('[GOLD_WRITE] ✅ addCurrency success:', {
+          userId,
+          userEmail,
+          currencyType,
+          amount,
+          balanceAfter: newBalance,
+          transactionId: transactionRef.id
+        });
+
         return {
           id: transactionRef.id,
           ...transactionData,
@@ -306,6 +325,26 @@ class VirtualCurrencyService {
         } as Transaction;
       });
     } catch (error: any) {
+      if (FirebaseErrorHandler.isPermissionError(error)) {
+        console.error('🔒 [GOLD_WRITE] addCurrency permission-denied:', {
+          userId,
+          userEmail,
+          currencyType,
+          amount,
+          code: error.code,
+          message: error.message
+        });
+      } else {
+        console.error('[GOLD_WRITE] ❌ addCurrency failed:', {
+          userId,
+          userEmail,
+          currencyType,
+          amount,
+          description,
+          error: error.message,
+          code: error.code
+        });
+      }
       FirebaseErrorHandler.logError('addCurrency', error);
       throw new Error(`Failed to add currency: ${error.message}`);
     }
@@ -632,6 +671,26 @@ class VirtualCurrencyService {
         };
       });
     } catch (error: any) {
+      if (FirebaseErrorHandler.isPermissionError(error)) {
+        console.error('🔒 [GOLD_WRITE] transferCurrency permission-denied:', {
+          fromUserId,
+          toUserId,
+          currencyType,
+          amount,
+          code: error.code,
+          message: error.message
+        });
+      } else {
+        console.error('[GOLD_WRITE] ❌ transferCurrency failed:', {
+          fromUserId,
+          toUserId,
+          currencyType,
+          amount,
+          description,
+          error: error.message,
+          code: error.code
+        });
+      }
       FirebaseErrorHandler.logError('transferCurrency', error);
       throw new Error(`Failed to transfer currency: ${error.message}`);
     }
