@@ -373,7 +373,7 @@ class VirtualCurrencyService {
       // Calculate new balance safely (will never be negative)
       const newBalance = calculateNewBalance(currentBalance, amount);
       
-      console.log(`[GOLD_WRITE] ✏️ Preparing Firestore update:`, {
+      console.log(`[GOLD_WRITE] ✏️ About to update Firestore:`, {
         userId,
         userEmail,
         firestorePath,
@@ -387,21 +387,26 @@ class VirtualCurrencyService {
         }
       });
 
-      // Update user balance - set to exact value to prevent any negative scenarios
-      // Wrap in timeout to prevent hanging
+      // Update user balance - wrap in timeout to prevent hanging
+      let balanceUpdateSucceeded = false;
       try {
         const updatePromise = updateDoc(userRef, {
           [`currencyBalances.${currencyType}`]: newBalance,
           'currencyBalances.lastUpdated': serverTimestamp()
         });
         
+        // Create timeout promise that will reject after 10 seconds
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Firestore update timeout after 10 seconds')), 10000);
+          setTimeout(() => {
+            reject(new Error('Firestore update timeout after 10 seconds'));
+          }, 10000);
         });
         
+        // Race the update against the timeout
         await Promise.race([updatePromise, timeoutPromise]);
         
-        console.log(`[GOLD_WRITE] ✅ Firestore balance update successful:`, {
+        balanceUpdateSucceeded = true;
+        console.log(`[GOLD_WRITE] ✅ Balance update succeeded:`, {
           userId,
           userEmail,
           firestorePath,
@@ -410,27 +415,51 @@ class VirtualCurrencyService {
           newBalance
         });
       } catch (updateError: any) {
+        balanceUpdateSucceeded = false;
+        
         if (updateError?.message?.includes('timeout')) {
-          console.error(`[GOLD_WRITE] ⏱️ Firestore update timed out:`, {
-            userId,
-            userEmail,
-            firestorePath,
-            currencyType
-          });
-          throw new Error('Request timed out. Please check your connection and try again.');
-        }
-        if (updateError?.code === 'permission-denied') {
-          console.error(`[GOLD_WRITE] 🔒 Permission denied writing to Firestore:`, {
+          console.error(`[GOLD_WRITE] ❌ Balance update failed:`, {
             userId,
             userEmail,
             firestorePath,
             currencyType,
+            error: 'Request timed out. Please check your connection and try again.',
+            errorCode: 'timeout',
+            errorMessage: updateError.message
+          });
+          throw new Error('Request timed out. Please check your connection and try again.');
+        }
+        
+        if (updateError?.code === 'permission-denied') {
+          console.error(`[GOLD_WRITE] ❌ Balance update failed:`, {
+            userId,
+            userEmail,
+            firestorePath,
+            currencyType,
+            error: 'Permission denied',
             errorCode: updateError.code,
             errorMessage: updateError.message
           });
           throw new Error(`Permission denied: You don't have permission to update your balance. Please contact support.`);
         }
+        
+        // Any other error
+        console.error(`[GOLD_WRITE] ❌ Balance update failed:`, {
+          userId,
+          userEmail,
+          firestorePath,
+          currencyType,
+          error: updateError.message || 'Unknown error',
+          errorCode: updateError.code,
+          errorMessage: updateError.message,
+          errorName: updateError.name
+        });
         throw updateError;
+      }
+
+      // Only proceed with transaction logging if balance update succeeded
+      if (!balanceUpdateSucceeded) {
+        throw new Error('Balance update failed');
       }
 
       // Create transaction record (non-blocking - balance update already succeeded)
@@ -462,7 +491,9 @@ class VirtualCurrencyService {
         // Wrap in timeout to prevent hanging
         const addDocPromise = addDoc(collection(db, 'transactions'), transaction);
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Firestore transaction creation timeout after 5 seconds')), 5000);
+          setTimeout(() => {
+            reject(new Error('Firestore transaction creation timeout after 5 seconds'));
+          }, 5000);
         });
         
         const transactionRef = await Promise.race([addDocPromise, timeoutPromise]);
@@ -495,47 +526,28 @@ class VirtualCurrencyService {
       } catch (transactionError: any) {
         // Transaction creation failed, but balance update succeeded
         // Log the error but don't throw - the purchase was successful
-        if (transactionError?.code === 'permission-denied' || transactionError?.message?.includes('timeout')) {
-          console.warn(`[GOLD_WRITE] ⚠️ Transaction record creation failed (non-critical):`, {
-            userId,
-            userEmail,
-            errorCode: transactionError.code,
-            errorMessage: transactionError.message,
-            note: 'Balance update succeeded, transaction logging failed'
-          });
-          
-          // Return a transaction object with a generated ID (balance update succeeded)
-          const result = {
-            id: `temp_${Date.now()}`,
-            ...transaction,
-            timestamp: new Date()
-          } as Transaction;
-
-          console.log(`[GOLD_WRITE] ✅ spendCurrency completed (balance updated, transaction logging skipped):`, {
-            userId,
-            userEmail,
-            currencyType,
-            amount,
-            finalBalance: newBalance
-          });
-
-          return result;
-        }
-        
-        // For other errors, still log but don't fail the operation
         console.warn(`[GOLD_WRITE] ⚠️ Transaction record creation failed (non-critical):`, {
           userId,
           userEmail,
           errorCode: transactionError.code,
-          errorMessage: transactionError.message
+          errorMessage: transactionError.message,
+          note: 'Balance update succeeded, transaction logging failed'
         });
         
-        // Return a transaction object with a generated ID
+        // Return a transaction object with a generated ID (balance update succeeded)
         const result = {
           id: `temp_${Date.now()}`,
           ...transaction,
           timestamp: new Date()
         } as Transaction;
+
+        console.log(`[GOLD_WRITE] ✅ spendCurrency completed (balance updated, transaction logging skipped):`, {
+          userId,
+          userEmail,
+          currencyType,
+          amount,
+          finalBalance: newBalance
+        });
 
         return result;
       }
