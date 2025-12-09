@@ -75,17 +75,93 @@ async function setAdminClaim(email, adminLevel = 'super') {
     console.log(`   Admin Level: ${adminLevel}`);
     console.log(`\n⚠️  IMPORTANT: The user must sign out and sign back in for the changes to take effect.`);
     
-    // Optionally, update Firestore user document
+    // Update Firestore user document - ensure profile exists and is complete
     const db = admin.firestore();
     const userRef = db.collection('users').doc(user.uid);
+    const existingDoc = await userRef.get();
     
-    await userRef.set({
-      isAdmin: true,
-      adminLevel: adminLevel,
-      adminGrantedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
+    // Check if profile exists and has required fields (username and displayName)
+    const existingData = existingDoc.exists ? existingDoc.data() : null;
+    const hasCompleteProfile = existingData && existingData.username && existingData.displayName;
     
-    console.log(`✅ Firestore user document updated`);
+    if (!hasCompleteProfile) {
+      console.log(`\n⚠️  Profile is missing or incomplete - creating/updating profile...`);
+      
+      // Generate username and displayName from email if missing
+      const emailPrefix = email.split('@')[0];
+      const defaultDisplayName = existingData?.displayName || user.displayName || emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+      const defaultUsername = existingData?.username || emailPrefix.toLowerCase();
+      
+      // Create or update profile with required fields
+      const profileData = {
+        uid: user.uid,
+        email: user.email || email,
+        displayName: defaultDisplayName,
+        username: defaultUsername,
+        photoURL: user.photoURL || existingData?.photoURL,
+        
+        // Ensure required fields for app to load profile
+        displayNameLower: defaultDisplayName.toLowerCase(),
+        usernameLower: defaultUsername.toLowerCase(),
+        emailLower: (user.email || email).toLowerCase(),
+        
+        // Currency balances
+        gold: existingData?.gold || existingData?.currencyBalances?.gold || 0,
+        gems: existingData?.gems || existingData?.currencyBalances?.gems || 0,
+        currencyBalances: existingData?.currencyBalances || {
+          gold: existingData?.gold || 0,
+          gems: existingData?.gems || 0,
+          lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        },
+        
+        // Basic profile fields
+        level: existingData?.level || 1,
+        status: existingData?.status || 'online',
+        isOnline: existingData?.isOnline !== undefined ? existingData.isOnline : true,
+        lastActivity: existingData?.lastActivity || admin.firestore.FieldValue.serverTimestamp(),
+        
+        // Privacy settings
+        allowFriendRequests: existingData?.allowFriendRequests !== undefined ? existingData.allowFriendRequests : true,
+        allowMessagesFromStrangers: existingData?.allowMessagesFromStrangers !== undefined ? existingData.allowMessagesFromStrangers : false,
+        showOnlineStatus: existingData?.showOnlineStatus !== undefined ? existingData.showOnlineStatus : true,
+        
+        // Friend system
+        friends: existingData?.friends || [],
+        blockedUsers: existingData?.blockedUsers || [],
+        
+        // Profile customization
+        bio: existingData?.bio || '',
+        customStatus: existingData?.customStatus || '',
+        
+        // Subscription
+        subscriptionPlan: existingData?.subscriptionPlan || 'free',
+        subscriptionStatus: existingData?.subscriptionStatus || 'expired',
+        
+        // Admin fields
+        isAdmin: true,
+        adminLevel: adminLevel,
+        adminGrantedAt: admin.firestore.FieldValue.serverTimestamp(),
+        
+        // Timestamps
+        createdAt: existingData?.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+        lastSeen: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      
+      await userRef.set(profileData, { merge: true });
+      console.log(`✅ Profile created/updated with required fields:`);
+      console.log(`   Username: ${defaultUsername}`);
+      console.log(`   Display Name: ${defaultDisplayName}`);
+    } else {
+      // Profile exists, just update admin fields
+      await userRef.set({
+        isAdmin: true,
+        adminLevel: adminLevel,
+        adminGrantedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      console.log(`✅ Firestore user document updated (profile already complete)`);
+      console.log(`   Username: ${existingData.username}`);
+      console.log(`   Display Name: ${existingData.displayName}`);
+    }
     
   } catch (error) {
     console.error('❌ Error setting admin claim:', error.message);
