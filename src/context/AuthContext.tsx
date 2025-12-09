@@ -1160,21 +1160,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const updateUserProfile = async (updates: any) => {
-    if (!user) return;
+    const userId = user?.uid || 'unknown';
+    const userEmail = user?.email || 'unknown';
+    
+    console.log(`[PROFILE_SAVE] 🚀 Starting updateUserProfile in AuthContext:`, {
+      userId,
+      userEmail,
+      updates: {
+        ...updates,
+        fieldsBeingUpdated: Object.keys(updates)
+      }
+    });
+
+    if (!user) {
+      console.log(`[PROFILE_SAVE] ❌ No user in AuthContext:`, { userId, userEmail });
+      return;
+    }
 
     // Don't allow guest users to update their profile
     if (isGuest) {
-      console.warn('Guest users cannot update their profile');
+      console.warn(`[PROFILE_SAVE] ❌ Guest users cannot update their profile:`, { userId, userEmail, isGuest });
       return;
     }
 
     try {
-      console.log(`🔄 Updating user profile for ${user.uid}:`, updates);
+      console.log(`[PROFILE_SAVE] 📝 Calling firestoreService.updateUser:`, {
+        userId,
+        userEmail,
+        updates
+      });
+      
       await firestoreService.updateUser(user.uid, updates);
-      console.log(`✅ Firestore update successful, updating local state...`);
+      
+      console.log(`[PROFILE_SAVE] ✅ Firestore update successful, updating local state:`, {
+        userId,
+        userEmail,
+        fieldsUpdated: Object.keys(updates)
+      });
+      
       safeSetUserProfile(prev => {
         const newProfile = { ...prev, ...updates };
-        console.log(`🔄 Profile state updated:`, {
+        console.log(`[PROFILE_SAVE] 🔄 Profile state updated in AuthContext:`, {
+          userId,
+          userEmail,
           before: { displayName: prev?.displayName, username: prev?.username },
           after: { displayName: newProfile.displayName, username: newProfile.username }
         });
@@ -1186,7 +1214,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // for immediate updates if needed
       if (updates.displayName || updates.photoURL) {
         try {
-          console.log(`🔄 Manually syncing profile changes for user ${user.uid}...`);
+          console.log(`[PROFILE_SAVE] 🔄 Manually syncing profile changes to conversations:`, {
+            userId,
+            userEmail,
+            fieldsToSync: { displayName: updates.displayName, photoURL: updates.photoURL }
+          });
+          
           await profileSyncService.syncProfileToConversations(user.uid, {
             displayName: updates.displayName,
             photoURL: updates.photoURL,
@@ -1194,10 +1227,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             bio: updates.bio,
             customStatus: updates.customStatus
           });
-          console.log(`✅ Profile changes synced successfully for user ${user.uid}`);
-        } catch (syncError) {
-          console.error('Failed to sync profile changes to conversations:', {
-            userId: user.uid,
+          
+          console.log(`[PROFILE_SAVE] ✅ Profile changes synced to conversations:`, {
+            userId,
+            userEmail
+          });
+        } catch (syncError: any) {
+          console.error(`[PROFILE_SAVE] ⚠️ Failed to sync profile changes to conversations (non-critical):`, {
+            userId,
+            userEmail,
             updates,
             error: syncError,
             errorCode: syncError?.code,
@@ -1207,8 +1245,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // The automatic sync listener will retry later
         }
       }
-    } catch (error) {
-      throw error;
+      
+      console.log(`[PROFILE_SAVE] ✅ updateUserProfile completed successfully:`, {
+        userId,
+        userEmail,
+        fieldsUpdated: Object.keys(updates)
+      });
+    } catch (error: any) {
+      const isPermissionError = error?.code === 'permission-denied' || error?.message?.includes('Permission denied');
+      const logPrefix = isPermissionError ? '🔒' : '❌';
+      
+      console.error(`[PROFILE_SAVE] ${logPrefix} updateUserProfile failed in AuthContext:`, {
+        userId,
+        userEmail,
+        updates,
+        errorCode: error?.code,
+        errorMessage: error?.message,
+        errorName: error?.name
+      });
+      
+      throw error; // Re-throw to be handled by caller
     }
   };
 

@@ -461,8 +461,22 @@ class FirestoreService {
   }
 
   async updateUser(uid: string, updates: Partial<AppUser>): Promise<void> {
+    const userEmail = auth?.currentUser?.email || 'unknown';
+    const userRef = doc(db, 'users', uid);
+    const firestorePath = `users/${uid}`;
+    
+    console.log(`[PROFILE_SAVE] 🚀 Starting updateUser:`, {
+      uid,
+      userEmail,
+      firestorePath,
+      updates: {
+        ...updates,
+        // Don't log sensitive data, but show which fields are being updated
+        fieldsBeingUpdated: Object.keys(updates)
+      }
+    });
+
     try {
-      const userRef = doc(db, 'users', uid);
       const updateData: any = {
         ...updates,
         lastSeen: serverTimestamp()
@@ -479,8 +493,57 @@ class FirestoreService {
         updateData.emailLower = updates.email.toLowerCase();
       }
 
-      await updateDoc(userRef, updateData);
+      console.log(`[PROFILE_SAVE] ✏️ Preparing Firestore update:`, {
+        uid,
+        userEmail,
+        firestorePath,
+        updatePayload: {
+          ...updateData,
+          lastSeen: '[serverTimestamp]'
+        }
+      });
+
+      try {
+        await updateDoc(userRef, updateData);
+        console.log(`[PROFILE_SAVE] ✅ Firestore update successful:`, {
+          uid,
+          userEmail,
+          firestorePath,
+          fieldsUpdated: Object.keys(updates)
+        });
+      } catch (updateError: any) {
+        if (updateError?.code === 'permission-denied') {
+          console.error(`[PROFILE_SAVE] 🔒 Permission denied writing to Firestore:`, {
+            uid,
+            userEmail,
+            firestorePath,
+            errorCode: updateError.code,
+            errorMessage: updateError.message,
+            fieldsAttempted: Object.keys(updates)
+          });
+          throw new Error(`Permission denied: You don't have permission to update your profile. Please contact support.`);
+        }
+        throw updateError;
+      }
     } catch (error: any) {
+      const isPermissionError = error?.code === 'permission-denied' || error?.message?.includes('Permission denied');
+      const logPrefix = isPermissionError ? '🔒' : '❌';
+      
+      console.error(`[PROFILE_SAVE] ${logPrefix} updateUser failed:`, {
+        uid,
+        userEmail,
+        firestorePath,
+        fieldsAttempted: Object.keys(updates),
+        errorCode: error?.code,
+        errorMessage: error?.message,
+        errorName: error?.name
+      });
+      
+      // Re-throw permission errors with user-friendly message
+      if (isPermissionError) {
+        throw error; // Already has user-friendly message
+      }
+      
       throw new Error(`Failed to update user: ${error.message}`);
     }
   }

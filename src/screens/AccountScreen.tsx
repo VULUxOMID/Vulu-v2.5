@@ -127,18 +127,33 @@ const AccountScreen = () => {
 
   // Update user profile in Firebase
   const updateProfile = async (field: string, value: string): Promise<boolean> => {
+    const userId = user?.uid || 'unknown';
+    const userEmail = user?.email || 'unknown';
+    
+    console.log(`[PROFILE_SAVE] 🚀 Starting updateProfile:`, {
+      userId,
+      userEmail,
+      field,
+      value
+    });
+
     if (!user?.uid || isGuest) {
+      console.log(`[PROFILE_SAVE] ❌ Guest user or no user:`, { userId, userEmail, isGuest });
       showToastMessage('Please sign in to update your profile');
       return false;
     }
 
     setIsLoading(true);
+    
     try {
       const updates: any = {};
 
       switch (field) {
         case 'username':
+          console.log(`[PROFILE_SAVE] 📝 Validating username:`, { userId, userEmail, value });
           if (!(await validateUsername(value))) {
+            console.log(`[PROFILE_SAVE] ❌ Username validation failed:`, { userId, userEmail, value });
+            setIsLoading(false); // Clear loading state on validation failure
             return false;
           }
           updates.username = value;
@@ -148,6 +163,7 @@ const AccountScreen = () => {
           break;
         case 'email':
           // Email changes require password confirmation
+          setIsLoading(false); // Clear loading state before showing alert
           Alert.alert(
             'Change Email',
             'To change your email address, please enter your current password for security.',
@@ -169,10 +185,19 @@ const AccountScreen = () => {
                             return;
                           }
                           try {
+                            console.log(`[PROFILE_SAVE] 📧 Updating email:`, { userId, userEmail, newEmail: value });
                             await updateUserEmail(value, password);
+                            console.log(`[PROFILE_SAVE] ✅ Email update successful:`, { userId, userEmail, newEmail: value });
                             showToastMessage('Email updated successfully. Please verify your new email address.');
                             setEmail(value);
                           } catch (error: any) {
+                            console.error(`[PROFILE_SAVE] ❌ Email update failed:`, {
+                              userId,
+                              userEmail,
+                              newEmail: value,
+                              errorCode: error?.code,
+                              errorMessage: error?.message
+                            });
                             showToastMessage(error.message || 'Failed to update email');
                           }
                         }
@@ -189,19 +214,60 @@ const AccountScreen = () => {
           updates.phoneNumber = value;
           break;
         default:
+          console.log(`[PROFILE_SAVE] ❌ Unknown field type:`, { userId, userEmail, field });
+          setIsLoading(false); // Clear loading state for unknown field
           return false;
       }
 
       if (Object.keys(updates).length > 0) {
+        console.log(`[PROFILE_SAVE] ✏️ Calling updateUserProfile:`, {
+          userId,
+          userEmail,
+          field,
+          updates
+        });
+        
         await updateUserProfile(updates);
+        
+        console.log(`[PROFILE_SAVE] ✅ Profile update successful:`, {
+          userId,
+          userEmail,
+          field,
+          value
+        });
+        
         showToastMessage('Profile updated successfully');
       }
       return true;
     } catch (error: any) {
-      showToastMessage(error.message || 'Failed to update profile');
+      const isPermissionError = error?.code === 'permission-denied' || error?.message?.includes('Permission denied');
+      const logPrefix = isPermissionError ? '🔒' : '❌';
+      
+      console.error(`[PROFILE_SAVE] ${logPrefix} Profile update failed:`, {
+        userId,
+        userEmail,
+        field,
+        value,
+        errorCode: error?.code,
+        errorMessage: error?.message,
+        errorName: error?.name
+      });
+      
+      // Show user-friendly error message
+      let errorMessage = error.message || 'Failed to update profile';
+      if (isPermissionError) {
+        errorMessage = 'Permission denied: You don\'t have permission to update your profile. Please contact support.';
+      }
+      
+      showToastMessage(errorMessage);
       return false;
     } finally {
       setIsLoading(false);
+      console.log(`[PROFILE_SAVE] 🏁 Profile update flow completed (loading state cleared):`, {
+        userId,
+        userEmail,
+        field
+      });
     }
   };
 

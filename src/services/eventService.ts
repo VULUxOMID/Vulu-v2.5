@@ -46,9 +46,30 @@ class EventService {
    * Should be called on app start and resume
    */
   async calculateServerTimeOffset(): Promise<number> {
+    const userId = this.getCurrentUserId();
+    const userEmail = auth?.currentUser?.email || 'unknown';
+    const functionName = 'getServerTime';
+    const functionRegion = 'us-central1'; // Default region from firebase.ts
+    
+    console.log(`[FUNCTION_CALL] 🚀 Starting getServerTime Cloud Function call:`, {
+      userId,
+      userEmail,
+      functionName,
+      functionRegion
+    });
+
     try {
       const before = Date.now();
       const getServerTimeFn = httpsCallable<{}, ServerTimeResponse>(functions, 'getServerTime');
+      
+      console.log(`[FUNCTION_CALL] 📡 Calling Cloud Function:`, {
+        userId,
+        userEmail,
+        functionName,
+        functionRegion,
+        functionUrl: `https://${functionRegion}-vulugo.cloudfunctions.net/${functionName}`
+      });
+      
       const result = await getServerTimeFn();
       const after = Date.now();
 
@@ -57,11 +78,30 @@ class EventService {
       this.serverTimeOffsetMs = serverTime - (before + latency);
       this.offsetCalculated = true;
 
-      console.log('Server time offset calculated:', this.serverTimeOffsetMs, 'ms');
+      console.log(`[FUNCTION_CALL] ✅ getServerTime successful:`, {
+        userId,
+        userEmail,
+        functionName,
+        serverTime,
+        latency,
+        offsetMs: this.serverTimeOffsetMs
+      });
 
       return this.serverTimeOffsetMs;
     } catch (error: any) {
-      console.error('Failed to calculate server time offset:', error);
+      const isPermissionError = error?.code === 'functions/permission-denied' || error?.code === 'permission-denied';
+      const logPrefix = isPermissionError ? '🔒' : '❌';
+      
+      console.error(`[FUNCTION_CALL] ${logPrefix} getServerTime failed:`, {
+        userId,
+        userEmail,
+        functionName,
+        functionRegion,
+        errorCode: error?.code,
+        errorMessage: error?.message,
+        errorName: error?.name
+      });
+      
       FirebaseErrorHandler.logError('calculateServerTimeOffset', error);
       
       // Return 0 offset on error (fallback to local time)
@@ -189,9 +229,33 @@ class EventService {
    * @param idempotencyKey - Unique key to prevent double-charging (should be a UUID)
    */
   async enterEvent(idempotencyKey: string): Promise<EventEntryResult> {
+    const userId = this.getCurrentUserId();
+    const userEmail = auth?.currentUser?.email || 'unknown';
+    const functionName = 'enterEvent';
+    const functionRegion = 'us-central1'; // Default region from firebase.ts
+    
+    console.log(`[FUNCTION_CALL] 🚀 Starting enterEvent Cloud Function call:`, {
+      userId,
+      userEmail,
+      functionName,
+      functionRegion,
+      idempotencyKey,
+      payload: {
+        eventId: 'current',
+        idempotencyKey
+      }
+    });
+
     try {
       if (!this.isAuthenticated()) {
-        throw new Error('User must be authenticated to enter event');
+        const error = new Error('User must be authenticated to enter event');
+        console.error(`[FUNCTION_CALL] ❌ Authentication check failed:`, {
+          userId,
+          userEmail,
+          functionName,
+          error: error.message
+        });
+        throw error;
       }
 
       const enterEventFn = httpsCallable<
@@ -199,18 +263,46 @@ class EventService {
         EventEntryResult
       >(functions, 'enterEvent');
 
+      console.log(`[FUNCTION_CALL] 📡 Calling Cloud Function:`, {
+        userId,
+        userEmail,
+        functionName,
+        functionRegion,
+        functionUrl: `https://${functionRegion}-vulugo.cloudfunctions.net/${functionName}`,
+        payload: {
+          eventId: 'current',
+          idempotencyKey
+        }
+      });
+
       const result = await enterEventFn({
         eventId: 'current',
         idempotencyKey
       });
 
+      console.log(`[FUNCTION_CALL] ✅ Cloud Function call successful:`, {
+        userId,
+        userEmail,
+        functionName,
+        result: result.data
+      });
+
       return result.data;
     } catch (error: any) {
-      console.error(`[EVENT] ❌ Failed to enter event:`, {
-        error: error.message,
-        code: error.code,
-        stack: error.stack
+      const isPermissionError = error?.code === 'functions/permission-denied' || error?.code === 'permission-denied';
+      const logPrefix = isPermissionError ? '🔒' : '❌';
+      
+      console.error(`[FUNCTION_CALL] ${logPrefix} Cloud Function call failed:`, {
+        userId,
+        userEmail,
+        functionName,
+        functionRegion,
+        errorCode: error?.code,
+        errorMessage: error?.message,
+        errorName: error?.name,
+        idempotencyKey
       });
+      
       FirebaseErrorHandler.logError('enterEvent', error);
 
       // Extract error message from Firebase error with better handling
@@ -225,7 +317,12 @@ class EventService {
         if (errorMsg.toLowerCase().includes('expired') || errorMsg.toLowerCase().includes('ended')) {
           errorMessage = 'This event has ended. Please wait for the next one.';
           isExpired = true;
-          console.log(`[EVENT] ⚠️ Event has expired - gracefully handling`);
+          console.log(`[FUNCTION_CALL] ⚠️ Event has expired - gracefully handling:`, {
+            userId,
+            userEmail,
+            functionName,
+            errorMessage
+          });
         } else {
           errorMessage = errorMsg || 'Event requirements not met';
         }

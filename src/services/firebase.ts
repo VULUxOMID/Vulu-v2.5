@@ -122,8 +122,10 @@ const initializeFirebase = (): { success: boolean; error?: Error } => {
     console.log('✅ Firebase Storage initialized');
 
     // Initialize Functions
+    // Note: getFunctions(app) without region defaults to us-central1
+    // This matches the deployment region for Cloud Functions
     functions = getFunctions(app);
-    console.log('✅ Firebase Functions initialized');
+    console.log('✅ Firebase Functions initialized (region: us-central1, default)');
 
     // Development environment setup
     if (__DEV__) {

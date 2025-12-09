@@ -321,28 +321,100 @@ class VirtualCurrencyService {
     description: string,
     metadata?: any
   ): Promise<Transaction> {
+    const userEmail = auth?.currentUser?.email || 'unknown';
+    const userRef = doc(db, 'users', userId);
+    const firestorePath = `users/${userId}`;
+    
+    console.log(`[GOLD_WRITE] 🚀 Starting spendCurrency:`, {
+      userId,
+      userEmail,
+      currencyType,
+      amount,
+      description,
+      metadata,
+      firestorePath
+    });
+
     try {
       if (amount <= 0) {
-        throw new Error('Amount must be positive');
+        const error = new Error('Amount must be positive');
+        console.error(`[GOLD_WRITE] ❌ Validation failed:`, { userId, userEmail, amount, error: error.message });
+        throw error;
       }
 
       // Get current balance (already sanitized by getCurrencyBalances)
+      console.log(`[GOLD_WRITE] 📊 Fetching current balance for user:`, { userId, userEmail });
       const currentBalances = await this.getCurrencyBalances(userId);
+      const currentBalance = currentBalances[currencyType];
+      
+      console.log(`[GOLD_WRITE] 💰 Current balance check:`, {
+        userId,
+        userEmail,
+        currencyType,
+        currentBalance,
+        requestedAmount: amount,
+        willHaveEnough: hasEnoughBalance(currentBalance, amount)
+      });
       
       // Use safe balance check
-      if (!hasEnoughBalance(currentBalances[currencyType], amount)) {
-        throw new Error(`Insufficient ${currencyType} balance. Required: ${amount}, Available: ${currentBalances[currencyType]}`);
+      if (!hasEnoughBalance(currentBalance, amount)) {
+        const error = new Error(`Insufficient ${currencyType} balance. Required: ${amount}, Available: ${currentBalance}`);
+        console.error(`[GOLD_WRITE] ❌ Insufficient balance:`, {
+          userId,
+          userEmail,
+          currencyType,
+          currentBalance,
+          requestedAmount: amount,
+          error: error.message
+        });
+        throw error;
       }
 
-      const userRef = doc(db, 'users', userId);
       // Calculate new balance safely (will never be negative)
-      const newBalance = calculateNewBalance(currentBalances[currencyType], amount);
+      const newBalance = calculateNewBalance(currentBalance, amount);
+      
+      console.log(`[GOLD_WRITE] ✏️ Preparing Firestore update:`, {
+        userId,
+        userEmail,
+        firestorePath,
+        currencyType,
+        currentBalance,
+        amount,
+        newBalance,
+        updatePayload: {
+          [`currencyBalances.${currencyType}`]: newBalance,
+          'currencyBalances.lastUpdated': '[serverTimestamp]'
+        }
+      });
 
       // Update user balance - set to exact value to prevent any negative scenarios
-      await updateDoc(userRef, {
-        [`currencyBalances.${currencyType}`]: newBalance,
-        'currencyBalances.lastUpdated': serverTimestamp()
-      });
+      try {
+        await updateDoc(userRef, {
+          [`currencyBalances.${currencyType}`]: newBalance,
+          'currencyBalances.lastUpdated': serverTimestamp()
+        });
+        console.log(`[GOLD_WRITE] ✅ Firestore balance update successful:`, {
+          userId,
+          userEmail,
+          firestorePath,
+          currencyType,
+          oldBalance: currentBalance,
+          newBalance
+        });
+      } catch (updateError: any) {
+        if (updateError?.code === 'permission-denied') {
+          console.error(`[GOLD_WRITE] 🔒 Permission denied writing to Firestore:`, {
+            userId,
+            userEmail,
+            firestorePath,
+            currencyType,
+            errorCode: updateError.code,
+            errorMessage: updateError.message
+          });
+          throw new Error(`Permission denied: You don't have permission to update your balance. Please contact support.`);
+        }
+        throw updateError;
+      }
 
       // Create transaction record
       const transaction: Omit<Transaction, 'id'> = {
@@ -356,15 +428,76 @@ class VirtualCurrencyService {
         timestamp: serverTimestamp() as any
       };
 
-      const transactionRef = await addDoc(collection(db, 'transactions'), transaction);
+      console.log(`[GOLD_WRITE] 📝 Creating transaction record:`, {
+        userId,
+        userEmail,
+        transaction: {
+          ...transaction,
+          timestamp: '[serverTimestamp]'
+        }
+      });
 
-      return {
-        id: transactionRef.id,
-        ...transaction,
-        timestamp: new Date()
-      } as Transaction;
+      try {
+        const transactionRef = await addDoc(collection(db, 'transactions'), transaction);
+        console.log(`[GOLD_WRITE] ✅ Transaction record created successfully:`, {
+          userId,
+          userEmail,
+          transactionId: transactionRef.id,
+          currencyType,
+          amount,
+          newBalance
+        });
+
+        const result = {
+          id: transactionRef.id,
+          ...transaction,
+          timestamp: new Date()
+        } as Transaction;
+
+        console.log(`[GOLD_WRITE] ✅ spendCurrency completed successfully:`, {
+          userId,
+          userEmail,
+          transactionId: transactionRef.id,
+          currencyType,
+          amount,
+          finalBalance: newBalance
+        });
+
+        return result;
+      } catch (transactionError: any) {
+        if (transactionError?.code === 'permission-denied') {
+          console.error(`[GOLD_WRITE] 🔒 Permission denied creating transaction:`, {
+            userId,
+            userEmail,
+            errorCode: transactionError.code,
+            errorMessage: transactionError.message
+          });
+          throw new Error(`Permission denied: Could not create transaction record. Please contact support.`);
+        }
+        throw transactionError;
+      }
     } catch (error: any) {
+      const isPermissionError = error?.code === 'permission-denied' || error?.message?.includes('Permission denied');
+      const logPrefix = isPermissionError ? '🔒' : '❌';
+      
+      console.error(`[GOLD_WRITE] ${logPrefix} spendCurrency failed:`, {
+        userId,
+        userEmail,
+        currencyType,
+        amount,
+        errorCode: error?.code,
+        errorMessage: error?.message,
+        errorName: error?.name,
+        firestorePath
+      });
+      
       FirebaseErrorHandler.logError('spendCurrency', error);
+      
+      // Re-throw permission errors with user-friendly message
+      if (isPermissionError) {
+        throw error; // Already has user-friendly message
+      }
+      
       throw new Error(`Failed to spend currency: ${error.message}`);
     }
   }

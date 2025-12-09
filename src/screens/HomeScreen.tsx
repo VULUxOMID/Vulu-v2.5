@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, ScrollView, Animated, Platform, NativeSyntheticEvent, NativeScrollEvent, LayoutChangeEvent, Modal, TouchableWithoutFeedback, PanResponder, StatusBar, TextInput, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, ScrollView, Animated, Platform, NativeSyntheticEvent, NativeScrollEvent, LayoutChangeEvent, Modal, TouchableWithoutFeedback, PanResponder, StatusBar, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { Text, Card, Avatar } from 'react-native-paper';
 import { MaterialIcons, MaterialCommunityIcons, Ionicons, FontAwesome5, AntDesign } from '@expo/vector-icons';
 import { Svg, Path, Circle } from 'react-native-svg';
@@ -172,6 +172,7 @@ const HomeScreen = () => {
 
   const [spotlightModalVisible, setSpotlightModalVisible] = useState(false);
   const [spotlightQueuePosition, setSpotlightQueuePosition] = useState<number>(0);
+  const [isPurchasingSpotlight, setIsPurchasingSpotlight] = useState(false);
 
   // Animation for spotlight modal overlay
   const spotlightOverlayAnim = useRef(new Animated.Value(0)).current;
@@ -1067,20 +1068,59 @@ const HomeScreen = () => {
     });
   };
   const purchaseSpotlight = async (minutes: number, cost: number) => {
+    const userId = user?.uid || 'unknown';
+    const userEmail = user?.email || 'unknown';
+    
+    console.log(`[SPOTLIGHT] 🚀 Starting purchaseSpotlight:`, {
+      userId,
+      userEmail,
+      minutes,
+      cost,
+      currentGoldBalance: goldBalance
+    });
+
+    // Prevent double-tap
+    if (isPurchasingSpotlight) {
+      console.log(`[SPOTLIGHT] ⚠️ Purchase already in progress, ignoring tap`);
+      return;
+    }
+
     if (goldBalance < cost) {
       // Handle insufficient balance
+      console.log(`[SPOTLIGHT] ❌ Insufficient balance:`, {
+        userId,
+        userEmail,
+        currentGoldBalance: goldBalance,
+        requiredCost: cost
+      });
       Alert.alert('Insufficient Balance', `You need ${cost} gold to purchase ${minutes} minutes of spotlight.`);
       return;
     }
 
     if (!user || isGuest) {
+      console.log(`[SPOTLIGHT] ❌ Guest user attempted purchase:`, { userId, userEmail, isGuest });
       handleGuestRestriction('spotlight purchase');
       return;
     }
 
+    setIsPurchasingSpotlight(true);
+    
     try {
+      console.log(`[SPOTLIGHT] 💰 Calling spendCurrency:`, {
+        userId,
+        userEmail,
+        currencyType: 'gold',
+        amount: cost,
+        description: `Spotlight purchase: ${minutes} minutes`,
+        metadata: {
+          type: 'spotlight_purchase',
+          duration: minutes,
+          timestamp: new Date().toISOString()
+        }
+      });
+
       // Deduct cost using virtual currency service
-      await virtualCurrencyService.spendCurrency(
+      const transaction = await virtualCurrencyService.spendCurrency(
         user.uid,
         'gold',
         cost,
@@ -1092,6 +1132,13 @@ const HomeScreen = () => {
         }
       );
 
+      console.log(`[SPOTLIGHT] ✅ spendCurrency successful:`, {
+        userId,
+        userEmail,
+        transactionId: transaction.id,
+        newBalance: transaction.balanceAfter
+      });
+
       // Set timer and show spotlight
       setYourSpotlightTimeLeft(minutes * 60);
       setShowYourPill(true);
@@ -1102,10 +1149,44 @@ const HomeScreen = () => {
 
       closeSpotlightModal();
 
+      console.log(`[SPOTLIGHT] ✅ Purchase completed successfully:`, {
+        userId,
+        userEmail,
+        minutes,
+        cost,
+        transactionId: transaction.id
+      });
+
       Alert.alert('Success!', `You've purchased ${minutes} minutes of spotlight time!`);
     } catch (error: any) {
-      console.error('Failed to purchase spotlight:', error);
-      Alert.alert('Purchase Failed', error.message || 'Failed to purchase spotlight. Please try again.');
+      const isPermissionError = error?.code === 'permission-denied' || error?.message?.includes('Permission denied');
+      const logPrefix = isPermissionError ? '🔒' : '❌';
+      
+      console.error(`[SPOTLIGHT] ${logPrefix} Purchase failed:`, {
+        userId,
+        userEmail,
+        minutes,
+        cost,
+        errorCode: error?.code,
+        errorMessage: error?.message,
+        errorName: error?.name
+      });
+      
+      // Show user-friendly error message
+      let errorMessage = error.message || 'Failed to purchase spotlight. Please try again.';
+      if (isPermissionError) {
+        errorMessage = 'Permission denied: You don\'t have permission to purchase spotlight. Please contact support.';
+      } else if (error.message?.includes('Insufficient')) {
+        errorMessage = error.message; // Keep the original insufficient balance message
+      }
+      
+      Alert.alert('Purchase Failed', errorMessage);
+    } finally {
+      setIsPurchasingSpotlight(false);
+      console.log(`[SPOTLIGHT] 🏁 Purchase flow completed (loading state cleared):`, {
+        userId,
+        userEmail
+      });
     }
   };
 
@@ -3235,28 +3316,58 @@ const HomeScreen = () => {
               <Text style={styles.goldBalanceText}>{formatCurrencyCompact(goldBalance)}</Text>
             </TouchableOpacity>
             <Text style={styles.spotlightModalSubtitle}>Select Duration</Text>
-            <TouchableOpacity style={styles.spotlightOption} onPress={() => purchaseSpotlight(2, 5)}>
-              <Text style={[styles.spotlightOptionText, goldBalance < 5 && styles.disabledOption]}>
-                2 Minutes — 5 Gold
-              </Text>
-              {goldBalance < 5 && (
-                <Text style={styles.insufficientText}>Insufficient Balance</Text>
+            <TouchableOpacity 
+              style={styles.spotlightOption} 
+              onPress={() => purchaseSpotlight(2, 5)}
+              disabled={isPurchasingSpotlight || goldBalance < 5}
+            >
+              {isPurchasingSpotlight ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={[styles.spotlightOptionText, goldBalance < 5 && styles.disabledOption]}>
+                    2 Minutes — 5 Gold
+                  </Text>
+                  {goldBalance < 5 && (
+                    <Text style={styles.insufficientText}>Insufficient Balance</Text>
+                  )}
+                </>
               )}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.spotlightOption} onPress={() => purchaseSpotlight(5, 10)}>
-              <Text style={[styles.spotlightOptionText, goldBalance < 10 && styles.disabledOption]}>
-                5 Minutes — 10 Gold
-              </Text>
-              {goldBalance < 10 && (
-                <Text style={styles.insufficientText}>Insufficient Balance</Text>
+            <TouchableOpacity 
+              style={styles.spotlightOption} 
+              onPress={() => purchaseSpotlight(5, 10)}
+              disabled={isPurchasingSpotlight || goldBalance < 10}
+            >
+              {isPurchasingSpotlight ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={[styles.spotlightOptionText, goldBalance < 10 && styles.disabledOption]}>
+                    5 Minutes — 10 Gold
+                  </Text>
+                  {goldBalance < 10 && (
+                    <Text style={styles.insufficientText}>Insufficient Balance</Text>
+                  )}
+                </>
               )}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.spotlightOption} onPress={() => purchaseSpotlight(10, 18)}>
-              <Text style={[styles.spotlightOptionText, goldBalance < 18 && styles.disabledOption]}>
-                10 Minutes — 18 Gold
-              </Text>
-              {goldBalance < 18 && (
-                <Text style={styles.insufficientText}>Insufficient Balance</Text>
+            <TouchableOpacity 
+              style={styles.spotlightOption} 
+              onPress={() => purchaseSpotlight(10, 18)}
+              disabled={isPurchasingSpotlight || goldBalance < 18}
+            >
+              {isPurchasingSpotlight ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={[styles.spotlightOptionText, goldBalance < 18 && styles.disabledOption]}>
+                    10 Minutes — 18 Gold
+                  </Text>
+                  {goldBalance < 18 && (
+                    <Text style={styles.insufficientText}>Insufficient Balance</Text>
+                  )}
+                </>
               )}
             </TouchableOpacity>
             {spotlightQueuePosition > 0 && (
