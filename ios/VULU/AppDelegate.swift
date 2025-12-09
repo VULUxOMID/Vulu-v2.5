@@ -103,14 +103,18 @@ class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
 
   override func bundleURL() -> URL? {
 #if DEBUG
-    // DEBUG MODE: Always return a Metro bundler URL (never nil)
+    // DEBUG MODE: Return Metro bundler URL from RCTBundleURLProvider
     // RCTBundleURLProvider automatically handles:
     // - localhost:8081 for iOS Simulator
     // - Auto-detection of Mac IP for physical devices on same Wi-Fi network
-    // The jsBundleURL method should return a non-optional URL in normal circumstances.
+    // The jsBundleURL method should return a non-optional URL.
     // If it returns nil, that indicates a configuration problem that must be fixed.
     let settings = RCTBundleURLProvider.sharedSettings()
-    let metroURL = settings.jsBundleURL(forBundleRoot: ".expo/.virtual-metro-entry", fallbackExtension: nil)
+    
+    // Use jsBundleURL which returns a non-optional URL
+    // This method constructs the proper Metro URL based on the device type and network
+    // Note: Using the method without fallbackExtension parameter (as in the backup/working version)
+    let metroURL = settings.jsBundleURL(forBundleRoot: ".expo/.virtual-metro-entry")
     
     if let url = metroURL {
       print("✅ [ReactNativeDelegate] Metro bundler URL: \(url.absoluteString)")
@@ -118,26 +122,19 @@ class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
     }
     
     // If RCTBundleURLProvider returns nil, this is a configuration error.
-    // We MUST return a URL to prevent "No script URL provided" error, but this URL
-    // may not work. The user must fix the configuration (DEBUG mode, Metro running, etc.)
-    // Note: This fallback uses localhost which only works on simulator, not physical devices.
-    // If you see this warning, check your Xcode scheme and ensure Metro is running.
-    let fallbackURL = URL(string: "http://localhost:8081/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true")
-    if let url = fallbackURL {
-      print("⚠️ [ReactNativeDelegate] WARNING: RCTBundleURLProvider returned nil!")
-      print("   → Using fallback URL (may not work on physical devices): \(url.absoluteString)")
-      print("   → FIX: Check Xcode scheme: Product → Scheme → Edit Scheme → Run → Build Configuration = Debug")
-      print("   → FIX: Ensure Metro is running: 'npm start' or 'expo start --dev-client'")
-      print("   → FIX: For physical devices, ensure device and Mac are on same Wi-Fi network")
-      return url
-    }
-    
-    // This should never happen (URL(string:) should always succeed for a valid string)
-    // But if it does, we have no choice but to return nil and let React Native show the error
-    print("❌ [ReactNativeDelegate] CRITICAL: Could not construct any Metro URL in DEBUG mode!")
-    print("   → This indicates a serious configuration issue")
-    print("   → Check Xcode scheme: Product → Scheme → Edit Scheme → Run → Build Configuration = Debug")
-    print("   → Ensure Metro bundler is running: 'npm start' or 'expo start --dev-client'")
+    // Common causes:
+    // 1. Not running in DEBUG mode (check Xcode scheme)
+    // 2. Metro bundler not started
+    // 3. Network configuration issue
+    // We return nil here so React Native shows a clear error message.
+    // The user must fix the configuration - we cannot construct a valid URL ourselves.
+    print("❌ [ReactNativeDelegate] CRITICAL: RCTBundleURLProvider returned nil!")
+    print("   → This means Metro bundler is NOT running or not accessible")
+    print("   → FIX 1: Start Metro bundler with: 'npx expo start --dev-client --host lan'")
+    print("   → FIX 2: Wait for Metro to show: 'Metro waiting on exp://192.168.x.x:8081'")
+    print("   → FIX 3: Keep Metro running, then run the app from Xcode")
+    print("   → FIX 4: For physical devices, ensure device and Mac are on same Wi-Fi network")
+    print("   → FIX 5: Verify Metro is accessible: Open http://192.168.x.x:8081/status in Safari")
     return nil
 #else
     // RELEASE MODE: Load the pre-bundled JS file from the app bundle
