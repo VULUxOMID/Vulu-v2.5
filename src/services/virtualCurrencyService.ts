@@ -388,11 +388,19 @@ class VirtualCurrencyService {
       });
 
       // Update user balance - set to exact value to prevent any negative scenarios
+      // Wrap in timeout to prevent hanging
       try {
-        await updateDoc(userRef, {
+        const updatePromise = updateDoc(userRef, {
           [`currencyBalances.${currencyType}`]: newBalance,
           'currencyBalances.lastUpdated': serverTimestamp()
         });
+        
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Firestore update timeout after 10 seconds')), 10000);
+        });
+        
+        await Promise.race([updatePromise, timeoutPromise]);
+        
         console.log(`[GOLD_WRITE] ✅ Firestore balance update successful:`, {
           userId,
           userEmail,
@@ -402,6 +410,15 @@ class VirtualCurrencyService {
           newBalance
         });
       } catch (updateError: any) {
+        if (updateError?.message?.includes('timeout')) {
+          console.error(`[GOLD_WRITE] ⏱️ Firestore update timed out:`, {
+            userId,
+            userEmail,
+            firestorePath,
+            currencyType
+          });
+          throw new Error('Request timed out. Please check your connection and try again.');
+        }
         if (updateError?.code === 'permission-denied') {
           console.error(`[GOLD_WRITE] 🔒 Permission denied writing to Firestore:`, {
             userId,
@@ -416,7 +433,9 @@ class VirtualCurrencyService {
         throw updateError;
       }
 
-      // Create transaction record
+      // Create transaction record (non-blocking - balance update already succeeded)
+      // Note: Firestore rules may block transaction creation for regular users,
+      // but we don't want to fail the entire operation if transaction logging fails
       const transaction: Omit<Transaction, 'id'> = {
         userId,
         type: 'spend',
@@ -428,7 +447,7 @@ class VirtualCurrencyService {
         timestamp: serverTimestamp() as any
       };
 
-      console.log(`[GOLD_WRITE] 📝 Creating transaction record:`, {
+      console.log(`[GOLD_WRITE] 📝 Attempting to create transaction record:`, {
         userId,
         userEmail,
         transaction: {
@@ -437,8 +456,17 @@ class VirtualCurrencyService {
         }
       });
 
+      // Try to create transaction record, but don't fail the entire operation if it fails
+      // (balance update already succeeded, transaction logging is secondary)
       try {
-        const transactionRef = await addDoc(collection(db, 'transactions'), transaction);
+        // Wrap in timeout to prevent hanging
+        const addDocPromise = addDoc(collection(db, 'transactions'), transaction);
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Firestore transaction creation timeout after 5 seconds')), 5000);
+        });
+        
+        const transactionRef = await Promise.race([addDocPromise, timeoutPromise]);
+        
         console.log(`[GOLD_WRITE] ✅ Transaction record created successfully:`, {
           userId,
           userEmail,
@@ -465,16 +493,51 @@ class VirtualCurrencyService {
 
         return result;
       } catch (transactionError: any) {
-        if (transactionError?.code === 'permission-denied') {
-          console.error(`[GOLD_WRITE] 🔒 Permission denied creating transaction:`, {
+        // Transaction creation failed, but balance update succeeded
+        // Log the error but don't throw - the purchase was successful
+        if (transactionError?.code === 'permission-denied' || transactionError?.message?.includes('timeout')) {
+          console.warn(`[GOLD_WRITE] ⚠️ Transaction record creation failed (non-critical):`, {
             userId,
             userEmail,
             errorCode: transactionError.code,
-            errorMessage: transactionError.message
+            errorMessage: transactionError.message,
+            note: 'Balance update succeeded, transaction logging failed'
           });
-          throw new Error(`Permission denied: Could not create transaction record. Please contact support.`);
+          
+          // Return a transaction object with a generated ID (balance update succeeded)
+          const result = {
+            id: `temp_${Date.now()}`,
+            ...transaction,
+            timestamp: new Date()
+          } as Transaction;
+
+          console.log(`[GOLD_WRITE] ✅ spendCurrency completed (balance updated, transaction logging skipped):`, {
+            userId,
+            userEmail,
+            currencyType,
+            amount,
+            finalBalance: newBalance
+          });
+
+          return result;
         }
-        throw transactionError;
+        
+        // For other errors, still log but don't fail the operation
+        console.warn(`[GOLD_WRITE] ⚠️ Transaction record creation failed (non-critical):`, {
+          userId,
+          userEmail,
+          errorCode: transactionError.code,
+          errorMessage: transactionError.message
+        });
+        
+        // Return a transaction object with a generated ID
+        const result = {
+          id: `temp_${Date.now()}`,
+          ...transaction,
+          timestamp: new Date()
+        } as Transaction;
+
+        return result;
       }
     } catch (error: any) {
       const isPermissionError = error?.code === 'permission-denied' || error?.message?.includes('Permission denied');

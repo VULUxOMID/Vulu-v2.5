@@ -504,7 +504,14 @@ class FirestoreService {
       });
 
       try {
-        await updateDoc(userRef, updateData);
+        // Wrap in timeout to prevent hanging
+        const updatePromise = updateDoc(userRef, updateData);
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Firestore update timeout after 10 seconds')), 10000);
+        });
+        
+        await Promise.race([updatePromise, timeoutPromise]);
+        
         console.log(`[PROFILE_SAVE] ✅ Firestore update successful:`, {
           uid,
           userEmail,
@@ -512,6 +519,15 @@ class FirestoreService {
           fieldsUpdated: Object.keys(updates)
         });
       } catch (updateError: any) {
+        if (updateError?.message?.includes('timeout')) {
+          console.error(`[PROFILE_SAVE] ⏱️ Firestore update timed out:`, {
+            uid,
+            userEmail,
+            firestorePath,
+            fieldsAttempted: Object.keys(updates)
+          });
+          throw new Error('Request timed out. Please check your connection and try again.');
+        }
         if (updateError?.code === 'permission-denied') {
           console.error(`[PROFILE_SAVE] 🔒 Permission denied writing to Firestore:`, {
             uid,

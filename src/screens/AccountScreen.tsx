@@ -60,6 +60,15 @@ const AccountScreen = () => {
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
 
+  // Watchdog: Clear any stuck loading states on mount
+  useEffect(() => {
+    // Clear any stuck loading states that might have persisted
+    if (isLoading) {
+      console.warn(`[WATCHDOG] ⚠️ Clearing stuck isLoading state on AccountScreen mount`);
+      setIsLoading(false);
+    }
+  }, []); // Only run on mount
+
   // Load user data from Firebase
   useEffect(() => {
     console.log(`[ACCOUNT] Loading user data:`, {
@@ -145,6 +154,13 @@ const AccountScreen = () => {
 
     setIsLoading(true);
     
+    // Watchdog timeout: Clear loading state after 15 seconds
+    const watchdogTimeout = setTimeout(() => {
+      console.error(`[WATCHDOG] ⚠️ Cleared stuck loading state: Profile save (field: ${field})`);
+      setIsLoading(false);
+      showToastMessage('Request timeout. Please try again.');
+    }, 15000);
+    
     try {
       const updates: any = {};
 
@@ -153,6 +169,7 @@ const AccountScreen = () => {
           console.log(`[PROFILE_SAVE] 📝 Validating username:`, { userId, userEmail, value });
           if (!(await validateUsername(value))) {
             console.log(`[PROFILE_SAVE] ❌ Username validation failed:`, { userId, userEmail, value });
+            clearTimeout(watchdogTimeout);
             setIsLoading(false); // Clear loading state on validation failure
             return false;
           }
@@ -163,6 +180,7 @@ const AccountScreen = () => {
           break;
         case 'email':
           // Email changes require password confirmation
+          clearTimeout(watchdogTimeout);
           setIsLoading(false); // Clear loading state before showing alert
           Alert.alert(
             'Change Email',
@@ -215,6 +233,7 @@ const AccountScreen = () => {
           break;
         default:
           console.log(`[PROFILE_SAVE] ❌ Unknown field type:`, { userId, userEmail, field });
+          clearTimeout(watchdogTimeout);
           setIsLoading(false); // Clear loading state for unknown field
           return false;
       }
@@ -229,6 +248,9 @@ const AccountScreen = () => {
         
         await updateUserProfile(updates);
         
+        // Clear watchdog timeout on success
+        clearTimeout(watchdogTimeout);
+        
         console.log(`[PROFILE_SAVE] ✅ Profile update successful:`, {
           userId,
           userEmail,
@@ -237,9 +259,14 @@ const AccountScreen = () => {
         });
         
         showToastMessage('Profile updated successfully');
+      } else {
+        clearTimeout(watchdogTimeout);
       }
       return true;
     } catch (error: any) {
+      // Clear watchdog timeout on error
+      clearTimeout(watchdogTimeout);
+      
       const isPermissionError = error?.code === 'permission-denied' || error?.message?.includes('Permission denied');
       const logPrefix = isPermissionError ? '🔒' : '❌';
       

@@ -173,6 +173,14 @@ const HomeScreen = () => {
   const [spotlightModalVisible, setSpotlightModalVisible] = useState(false);
   const [spotlightQueuePosition, setSpotlightQueuePosition] = useState<number>(0);
   const [isPurchasingSpotlight, setIsPurchasingSpotlight] = useState(false);
+  // Spotlight options are hardcoded (no loading needed)
+  const spotlightOptions = [
+    { minutes: 2, cost: 5 },
+    { minutes: 5, cost: 10 },
+    { minutes: 10, cost: 18 }
+  ];
+  // Track which specific option is being purchased (for individual button spinners)
+  const [purchasingOptionIndex, setPurchasingOptionIndex] = useState<number | null>(null);
 
   // Animation for spotlight modal overlay
   const spotlightOverlayAnim = useRef(new Animated.Value(0)).current;
@@ -218,6 +226,28 @@ const HomeScreen = () => {
   // Add states to track if the tutorials have been shown for gems widget (start with false, will be set based on user preferences)
   const [showGemsExpandTutorial, setShowGemsExpandTutorial] = useState(false);
   const [showGemsMinimizeTutorial, setShowGemsMinimizeTutorial] = useState(false);
+
+  // Watchdog: Clear any stuck loading states on mount
+  useEffect(() => {
+    // Clear any stuck loading states that might have persisted
+    if (isPurchasingSpotlight) {
+      console.warn(`[WATCHDOG] ⚠️ Clearing stuck isPurchasingSpotlight state on mount`);
+      setIsPurchasingSpotlight(false);
+      setPurchasingOptionIndex(null);
+    }
+  }, []); // Only run on mount
+
+  // Watchdog: Clear stuck loading states when modal closes
+  useEffect(() => {
+    if (!spotlightModalVisible) {
+      // Modal is closed, ensure loading states are cleared
+      if (isPurchasingSpotlight || purchasingOptionIndex !== null) {
+        console.warn(`[WATCHDOG] ⚠️ Clearing stuck loading states when modal closed`);
+        setIsPurchasingSpotlight(false);
+        setPurchasingOptionIndex(null);
+      }
+    }
+  }, [spotlightModalVisible]);
 
   // Load saved spotlight time from AsyncStorage on component mount
   useEffect(() => {
@@ -1050,6 +1080,10 @@ const HomeScreen = () => {
 
   /* First declaration of renderMinimalEventWidget removed */
   const openSpotlightModal = () => {
+    console.log(`[SPOTLIGHT_UI] 🚀 Opening Spotlight modal`);
+    // Reset any stuck loading states when opening modal
+    setIsPurchasingSpotlight(false);
+    setPurchasingOptionIndex(null);
     setSpotlightModalVisible(true);
     Animated.timing(spotlightOverlayAnim, {
       toValue: 1,
@@ -1059,6 +1093,10 @@ const HomeScreen = () => {
   };
 
   const closeSpotlightModal = () => {
+    console.log(`[SPOTLIGHT_UI] 🚪 Closing Spotlight modal`);
+    // Always clear loading states when closing modal
+    setIsPurchasingSpotlight(false);
+    setPurchasingOptionIndex(null);
     Animated.timing(spotlightOverlayAnim, {
       toValue: 0,
       duration: 250,
@@ -1067,7 +1105,7 @@ const HomeScreen = () => {
       setSpotlightModalVisible(false);
     });
   };
-  const purchaseSpotlight = async (minutes: number, cost: number) => {
+  const purchaseSpotlight = async (minutes: number, cost: number, optionIndex: number) => {
     const userId = user?.uid || 'unknown';
     const userEmail = user?.email || 'unknown';
     
@@ -1076,12 +1114,16 @@ const HomeScreen = () => {
       userEmail,
       minutes,
       cost,
+      optionIndex,
       currentGoldBalance: goldBalance
     });
 
     // Prevent double-tap
-    if (isPurchasingSpotlight) {
-      console.log(`[SPOTLIGHT] ⚠️ Purchase already in progress, ignoring tap`);
+    if (isPurchasingSpotlight || purchasingOptionIndex !== null) {
+      console.log(`[SPOTLIGHT] ⚠️ Purchase already in progress, ignoring tap:`, {
+        isPurchasingSpotlight,
+        purchasingOptionIndex
+      });
       return;
     }
 
@@ -1103,7 +1145,17 @@ const HomeScreen = () => {
       return;
     }
 
+    // Set loading state for this specific option
     setIsPurchasingSpotlight(true);
+    setPurchasingOptionIndex(optionIndex);
+    
+    // Watchdog timeout: Clear loading state after 15 seconds
+    const watchdogTimeout = setTimeout(() => {
+      console.error(`[WATCHDOG] ⚠️ Cleared stuck loading state: Spotlight purchase (optionIndex: ${optionIndex})`);
+      setIsPurchasingSpotlight(false);
+      setPurchasingOptionIndex(null);
+      Alert.alert('Request Timeout', 'The purchase request took too long. Please try again.');
+    }, 15000);
     
     try {
       console.log(`[SPOTLIGHT] 💰 Calling spendCurrency:`, {
@@ -1139,6 +1191,9 @@ const HomeScreen = () => {
         newBalance: transaction.balanceAfter
       });
 
+      // Clear watchdog timeout on success
+      clearTimeout(watchdogTimeout);
+
       // Set timer and show spotlight
       setYourSpotlightTimeLeft(minutes * 60);
       setShowYourPill(true);
@@ -1159,6 +1214,9 @@ const HomeScreen = () => {
 
       Alert.alert('Success!', `You've purchased ${minutes} minutes of spotlight time!`);
     } catch (error: any) {
+      // Clear watchdog timeout on error
+      clearTimeout(watchdogTimeout);
+      
       const isPermissionError = error?.code === 'permission-denied' || error?.message?.includes('Permission denied');
       const logPrefix = isPermissionError ? '🔒' : '❌';
       
@@ -1167,6 +1225,7 @@ const HomeScreen = () => {
         userEmail,
         minutes,
         cost,
+        optionIndex,
         errorCode: error?.code,
         errorMessage: error?.message,
         errorName: error?.name
@@ -1183,9 +1242,11 @@ const HomeScreen = () => {
       Alert.alert('Purchase Failed', errorMessage);
     } finally {
       setIsPurchasingSpotlight(false);
+      setPurchasingOptionIndex(null);
       console.log(`[SPOTLIGHT] 🏁 Purchase flow completed (loading state cleared):`, {
         userId,
-        userEmail
+        userEmail,
+        optionIndex
       });
     }
   };
@@ -3316,60 +3377,32 @@ const HomeScreen = () => {
               <Text style={styles.goldBalanceText}>{formatCurrencyCompact(goldBalance)}</Text>
             </TouchableOpacity>
             <Text style={styles.spotlightModalSubtitle}>Select Duration</Text>
-            <TouchableOpacity 
-              style={styles.spotlightOption} 
-              onPress={() => purchaseSpotlight(2, 5)}
-              disabled={isPurchasingSpotlight || goldBalance < 5}
-            >
-              {isPurchasingSpotlight ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Text style={[styles.spotlightOptionText, goldBalance < 5 && styles.disabledOption]}>
-                    2 Minutes — 5 Gold
-                  </Text>
-                  {goldBalance < 5 && (
-                    <Text style={styles.insufficientText}>Insufficient Balance</Text>
+            {spotlightOptions.map((option, index) => {
+              const isThisOptionPurchasing = purchasingOptionIndex === index;
+              const isDisabled = (isPurchasingSpotlight && !isThisOptionPurchasing) || goldBalance < option.cost;
+              
+              return (
+                <TouchableOpacity 
+                  key={index}
+                  style={styles.spotlightOption} 
+                  onPress={() => purchaseSpotlight(option.minutes, option.cost, index)}
+                  disabled={isDisabled}
+                >
+                  {isThisOptionPurchasing ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Text style={[styles.spotlightOptionText, goldBalance < option.cost && styles.disabledOption]}>
+                        {option.minutes} Minutes — {option.cost} Gold
+                      </Text>
+                      {goldBalance < option.cost && (
+                        <Text style={styles.insufficientText}>Insufficient Balance</Text>
+                      )}
+                    </>
                   )}
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.spotlightOption} 
-              onPress={() => purchaseSpotlight(5, 10)}
-              disabled={isPurchasingSpotlight || goldBalance < 10}
-            >
-              {isPurchasingSpotlight ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Text style={[styles.spotlightOptionText, goldBalance < 10 && styles.disabledOption]}>
-                    5 Minutes — 10 Gold
-                  </Text>
-                  {goldBalance < 10 && (
-                    <Text style={styles.insufficientText}>Insufficient Balance</Text>
-                  )}
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.spotlightOption} 
-              onPress={() => purchaseSpotlight(10, 18)}
-              disabled={isPurchasingSpotlight || goldBalance < 18}
-            >
-              {isPurchasingSpotlight ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Text style={[styles.spotlightOptionText, goldBalance < 18 && styles.disabledOption]}>
-                    10 Minutes — 18 Gold
-                  </Text>
-                  {goldBalance < 18 && (
-                    <Text style={styles.insufficientText}>Insufficient Balance</Text>
-                  )}
-                </>
-              )}
-            </TouchableOpacity>
+                </TouchableOpacity>
+              );
+            })}
             {spotlightQueuePosition > 0 && (
               <Text style={styles.spotlightQueueText}>Your queue position: {spotlightQueuePosition}</Text>
             )}
