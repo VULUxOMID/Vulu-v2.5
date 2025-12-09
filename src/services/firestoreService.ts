@@ -493,74 +493,45 @@ class FirestoreService {
         updateData.emailLower = updates.email.toLowerCase();
       }
 
-      console.log(`[PROFILE_SAVE] ✏️ Preparing Firestore update:`, {
+      console.log(`[PROFILE_SAVE] ✏️ Updating Firestore user document:`, {
         uid,
         userEmail,
-        firestorePath,
+        firestorePath: `users/${uid}`,
         updatePayload: {
           ...updateData,
           lastSeen: '[serverTimestamp]'
         }
       });
 
-      try {
-        // Wrap in timeout to prevent hanging
-        const updatePromise = updateDoc(userRef, updateData);
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Firestore update timeout after 10 seconds')), 10000);
-        });
-        
-        await Promise.race([updatePromise, timeoutPromise]);
-        
-        console.log(`[PROFILE_SAVE] ✅ Firestore update successful:`, {
-          uid,
-          userEmail,
-          firestorePath,
-          fieldsUpdated: Object.keys(updates)
-        });
-      } catch (updateError: any) {
-        if (updateError?.message?.includes('timeout')) {
-          console.error(`[PROFILE_SAVE] ⏱️ Firestore update timed out:`, {
-            uid,
-            userEmail,
-            firestorePath,
-            fieldsAttempted: Object.keys(updates)
-          });
-          throw new Error('Request timed out. Please check your connection and try again.');
-        }
-        if (updateError?.code === 'permission-denied') {
-          console.error(`[PROFILE_SAVE] 🔒 Permission denied writing to Firestore:`, {
-            uid,
-            userEmail,
-            firestorePath,
-            errorCode: updateError.code,
-            errorMessage: updateError.message,
-            fieldsAttempted: Object.keys(updates)
-          });
-          throw new Error(`Permission denied: You don't have permission to update your profile. Please contact support.`);
-        }
-        throw updateError;
-      }
-    } catch (error: any) {
-      const isPermissionError = error?.code === 'permission-denied' || error?.message?.includes('Permission denied');
-      const logPrefix = isPermissionError ? '🔒' : '❌';
-      
-      console.error(`[PROFILE_SAVE] ${logPrefix} updateUser failed:`, {
+      // Direct await, no timeout wrapper
+      await updateDoc(userRef, updateData);
+
+      console.log(`[PROFILE_SAVE] ✅ Firestore update successful:`, {
         uid,
         userEmail,
-        firestorePath,
-        fieldsAttempted: Object.keys(updates),
-        errorCode: error?.code,
-        errorMessage: error?.message,
-        errorName: error?.name
+        fieldsUpdated: Object.keys(updates)
+      });
+    } catch (error: any) {
+      const code = error?.code;
+      const message = error?.message || 'Unknown error';
+      
+      console.error(`[PROFILE_SAVE] ❌ Firestore update failed:`, {
+        uid,
+        userEmail,
+        firestorePath: `users/${uid}`,
+        errorCode: code,
+        errorMessage: message
       });
       
-      // Re-throw permission errors with user-friendly message
-      if (isPermissionError) {
-        throw error; // Already has user-friendly message
+      // Map Firebase errors to user-friendly messages
+      let friendly = 'Failed to save profile. Please try again.';
+      if (code === 'permission-denied') {
+        friendly = "You don't have permission to edit this profile. Please contact support.";
+      } else if (code === 'unavailable') {
+        friendly = 'Network error while saving profile. Please check your connection and try again.';
       }
       
-      throw new Error(`Failed to update user: ${error.message}`);
+      throw new Error(friendly);
     }
   }
 
